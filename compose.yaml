@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dash}
+      POSTGRES_DB: ${POSTGRES_DB:-dash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build: .
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    command: [alembic, upgrade, head]
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
+    environment: &collector_environment
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?Set INTERNAL_API_KEY in .env}
+      DISPLAY_TIMEZONE: ${DISPLAY_TIMEZONE:-UTC}
+      DASHBOARD_SESSION_HOURS: ${DASHBOARD_SESSION_HOURS:-8}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-false}
+      SCHEDULER_DAILY_HOUR_UTC: ${SCHEDULER_DAILY_HOUR_UTC:-9}
+      SCHEDULER_POLL_SECONDS: ${SCHEDULER_POLL_SECONDS:-900}
+      SCHEDULER_MAX_ATTEMPTS: ${SCHEDULER_MAX_ATTEMPTS:-3}
+      SCHEDULER_RETRY_MINUTES: ${SCHEDULER_RETRY_MINUTES:-30}
+      SCHEDULER_MAX_LATENESS_HOURS: ${SCHEDULER_MAX_LATENESS_HOURS:-2}
+      SCHEDULER_MAX_JOBS_PER_TICK: ${SCHEDULER_MAX_JOBS_PER_TICK:-2}
+      TIKTOK_ACCESS_TOKEN: ${TIKTOK_ACCESS_TOKEN:-}
+      TIKTOK_OPEN_ID: ${TIKTOK_OPEN_ID:-}
+      TIKTOK_SCOPES: ${TIKTOK_SCOPES:-user.info.basic,user.info.profile,user.info.stats,video.list}
+      TIKTOK_EXPECTED_USERNAME: ${TIKTOK_EXPECTED_USERNAME:-}
+      TIKTOK_MAX_PAGES: ${TIKTOK_MAX_PAGES:-100}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN:-}
+      INSTAGRAM_USER_ID: ${INSTAGRAM_USER_ID:-}
+      INSTAGRAM_API_VERSION: ${INSTAGRAM_API_VERSION:-v26.0}
+      INSTAGRAM_EXPECTED_USERNAME: ${INSTAGRAM_EXPECTED_USERNAME:-}
+      INSTAGRAM_MAX_PAGES: ${INSTAGRAM_MAX_PAGES:-100}
+      INSTAGRAM_CLIENT_ID: ${INSTAGRAM_CLIENT_ID:-}
+      INSTAGRAM_CLIENT_SECRET: ${INSTAGRAM_CLIENT_SECRET:-}
+      INSTAGRAM_REDIRECT_URI: ${INSTAGRAM_REDIRECT_URI:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  scheduler:
+    build: .
+    restart: unless-stopped
+    profiles: [scheduler]
+    command: [python, -m, app.cli.scheduler]
+    environment: *collector_environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  postgres_data:

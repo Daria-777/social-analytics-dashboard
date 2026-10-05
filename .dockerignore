@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+.venv
+__pycache__
+.pytest_cache
+tests
+*.egg-info
+
+.instagram-secret-*
+
+.tiktok-credentials/
+**/.tiktok-credentials/
+
+# Private database copies are never part of an image build.
+backups/

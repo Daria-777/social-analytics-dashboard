@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="/dashboard/assets/favicon.svg"
+    />
+    <title>DASH. — Social Analytics</title>
+    <link rel="stylesheet" href="/dashboard/assets/dashboard.css" />
+    <script type="module" src="/dashboard/assets/dashboard.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">К аналитике</a>
+    <section id="login" class="login-shell">
+      <div class="brand">DASH<span>.</span></div>
+      <p class="eyebrow">IN PROGRESS / SOCIAL ANALYTICS</p>
+      <h1>Аналитика аккаунтов</h1>
+      <form id="login-form">
+        <label for="access-key">Ключ доступа</label
+        ><input
+          id="access-key"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+        <label class="remember-browser" for="remember-browser">
+          <input id="remember-browser" type="checkbox" />
+          <span>Запомнить этот браузер на 30 дней</span>
+        </label>
+        <p class="muted login-hint">
+          Только на личном устройстве.
+        </p>
+        <button class="primary" type="submit">
+          Открыть аналитику <span aria-hidden="true">↗</span>
+        </button>
+      </form>
+      <p id="login-error" role="alert"></p>
+    </section>
+    <div id="workspace" hidden>
+      <header class="topbar">
+        <a class="brand" href="/dashboard">DASH<span>.</span></a
+        ><span class="brand-sub">IN PROGRESS<br />SOCIAL ANALYTICS</span
+        ><span class="read-only">Соцсети: только чтение</span
+        ><button id="logout" class="quiet">Выйти</button>
+      </header>
+      <div id="test-banner" class="test-banner" hidden>
+        TEST DASH · Изолированная тестовая база. Эти цифры не относятся к
+        реальному аккаунту.
+      </div>
+      <div class="app-layout">
+        <aside class="sidebar">
+          <p class="nav-hint">Разделы → прокрутите вправо</p>
+          <nav aria-label="Разделы аналитики">
+            <button data-view="overview" class="active" aria-current="page">
+              01 <span>Обзор</span></button
+            ><button data-view="content">02 <span>Публикации</span></button
+            ><button data-view="comparison">03 <span>Сравнение</span></button
+            ><button data-view="import">04 <span>Наблюдения</span></button
+            ><button data-view="experiments">05 <span>Гипотезы</span></button>
+          </nav>
+        </aside>
+        <main id="main-content" tabindex="-1">
+          <div class="page-heading">
+            <div>
+              <h1 id="page-title">Аналитика аккаунтов</h1>
+            </div>
+            <button id="refresh" class="outlined">Обновить данные ↻</button>
+          </div>
+          <p id="global-message" role="status" aria-live="polite"></p>
+          <details id="filter-disclosure" class="filter-disclosure" open>
+            <summary id="filter-summary">Фильтры: все платформы · любые даты</summary>
+          <form id="filters" class="filters">
+            <label
+              >Платформа<select id="filter-platform">
+                <option value="">Все платформы</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+              </select></label
+            >
+            <label>Публикации с<input id="filter-from" type="date" /></label>
+            <label>По<input id="filter-to" type="date" /></label>
+            <details class="additional-filters">
+              <summary>Дополнительные фильтры</summary>
+              <div class="filter-extra">
+                <label>Источник<select id="filter-source">
+                  <option value="">Все источники</option>
+                  <option value="instagram_api">Instagram API</option><option value="instagram_ui">Instagram Insights</option>
+                  <option value="tiktok_api">TikTok API</option><option value="tiktok_studio">TikTok Studio</option><option value="manual">Вручную</option>
+                </select></label>
+                <label>Серия<input id="filter-series" /></label><label>Тема<input id="filter-topic" /></label>
+                <label>Тип хука<input id="filter-hook" /></label><label>Формат<input id="filter-format" /></label>
+                <label>CTA<input id="filter-cta" /></label><label>Контент-пиллар<input id="filter-pillar" /></label>
+              </div>
+            </details>
+            <button type="submit" class="primary small">Применить</button
+            ><button id="reset-filters" type="button" class="quiet">
+              Сбросить
+            </button>
+          </form>
+          </details><div id="active-filters" class="active-filters"></div>
+          <div id="last-update" class="context-line"></div>
+          <p id="collection-note" class="collection-mark" data-collection-mode="automatic"><img src="/dashboard/assets/collection-automatic.svg" alt="" width="16" height="16" />Автоматический сбор из аккаунтов</p>
+          <section
+            id="view-overview"
+            class="view"
+            aria-labelledby="overview-title"
+          >
+            <div class="section-heading">
+              <h2>Последние публикации</h2>
+              <button type="button" class="quiet" data-view="content">
+                Открыть все →
+              </button>
+            </div>
+            <div id="recent-content"></div>
+            <div class="section-heading">
+              <h2 id="overview-title">Аккаунты</h2>
+            </div>
+            <div id="account-cards" class="account-grid"></div>
+            <details class="edit-box collector-management"><summary>Управление сбором и история запусков</summary>
+            <div class="section-heading">
+              <h2>Сбор данных</h2>
+              <span id="schedule-status" class="muted"></span>
+            </div>
+            <div id="collector-cards" class="collector-grid"></div>
+            <details class="history-box">
+              <summary>История запусков</summary>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">
+                    История сборов
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>Источник</th>
+                      <th>Начало</th>
+                      <th>Итог</th>
+                      <th>Наблюдений</th>
+                      <th>Попытка</th>
+                    </tr>
+                  </thead>
+                  <tbody id="run-rows"></tbody>
+                </table>
+              </div>
+            </details>
+            </details>
+          </section>
+          <section
+            id="view-content"
+            class="view"
+            hidden
+            aria-labelledby="content-title"
+          >
+            <div class="section-heading">
+              <h2 id="content-title">Публикации и наблюдения</h2>
+              <span id="content-count" class="muted"></span>
+            </div>
+            <label class="sort-control">Порядок<select id="content-sort"><option value="date">Сначала новые публикации</option><option value="views">Просмотры: по убыванию</option></select></label>
+            <details id="sort-help" hidden><summary>Как сравниваются просмотры</summary><p class="muted">Сортировка внутри групп по источнику, периоду и статусу.</p></details>
+            <div class="display-controls"><label>Вид<select id="content-display"><option value="list">Список</option><option value="chart">График</option></select></label><label id="chart-metric-control" hidden>Показатель графика<select id="content-chart-metric"><option value="views">Просмотры</option><option value="likes">Лайки</option><option value="shares">Репосты</option><option value="completion_rate">Досмотр, %</option><option value="average_watch_pct">Среднее время, % длины</option><option value="watch_time_avg_seconds">Среднее время, сек.</option></select></label></div>
+            <div id="publication-chart" hidden></div>
+            <div id="content-cards" class="publication-cards"></div>
+            <div id="content-table" class="table-wrap compact-content"></div>
+            <details class="history-box"><summary>Полная таблица показателей</summary><div id="content-full-table" class="table-wrap"></div></details>
+            <p class="muted">
+              — нет данных · 0 — нулевое значение
+            </p>
+          </section>
+          <section
+            id="view-comparison"
+            class="view"
+            hidden
+            aria-labelledby="comparison-title"
+          >
+            <div class="section-heading">
+              <h2 id="comparison-title">Сравнение групп</h2>
+            </div>
+            <div class="comparison-controls">
+              <label
+                >Сравнить по<select id="comparison-group">
+                  <option value="hook_type">Типу хука</option>
+                  <option value="series">Серии</option>
+                  <option value="topic">Теме</option>
+                  <option value="format">Формату</option>
+                  <option value="cta_type">CTA</option>
+                  <option value="content_pillar">Контент-пиллару</option>
+                  <option value="platform">Платформе</option>
+                </select></label
+              ><label
+                >Показатель<select id="comparison-metric">
+                  <option value="views">Просмотры</option>
+                  <option value="average_watch_pct">
+                    Среднее время просмотра, % длины
+                  </option>
+                  <option value="completion_rate">Досмотр, %</option>
+                  <option value="share_rate">Доля репостов</option>
+                  <option value="save_rate">Доля сохранений</option>
+                  <option value="profile_visit_rate">Переходы в профиль</option>
+                  <option value="follow_conversion">
+                    Конверсия в подписку
+                  </option>
+                </select></label
+              >
+            </div>
+            <div id="comparison-cards" class="comparison-cards"></div>
+            <details class="history-box"><summary>Таблица сравнения групп</summary><div id="comparison-table" class="table-wrap"></div></details>
+            <details class="comparison-help"><summary>О сравнении</summary><p class="muted">До 5 наблюдений — данных недостаточно; 5–9 — предварительный результат. Сравнение не доказывает причинную связь.</p></details>
+          </section>
+          <section
+            id="view-detail"
+            class="view"
+            hidden
+            aria-labelledby="detail-title"
+          >
+            <button id="detail-back" class="quiet">← К публикациям</button>
+            <div id="detail-preview" class="detail-preview"></div>
+            <div class="detail-heading">
+              <div>
+                <p id="detail-context" class="eyebrow"></p>
+                <h2 id="detail-title" tabindex="-1"></h2>
+                <p id="detail-metadata" class="muted"></p>
+              </div>
+              <a
+                id="detail-permalink"
+                class="outlined"
+                target="_blank"
+                rel="noopener noreferrer"
+                hidden
+                >Открыть публикацию ↗</a
+              >
+            </div>
+            <div class="section-heading"><h3>Наблюдения по источникам</h3></div>
+            <div id="detail-metrics" class="account-grid"></div>
+            <div class="section-heading">
+              <h3>Расчётные показатели</h3>
+            </div>
+            <div id="detail-derived" class="table-wrap"></div>
+            <div class="section-heading">
+              <h3>Распространение</h3>
+            </div>
+            <div id="growth-chart" class="chart-box"></div>
+            <div id="velocity-table" class="table-wrap"></div>
+            <div class="section-heading"><h3>Удержание из интерфейса</h3><span data-entry-mode="manual"></span></div>
+            <div id="retention-table" class="table-wrap"></div>
+            <div class="section-heading"><h3>История и география</h3></div>
+            <div id="detail-history" class="table-wrap"></div>
+            <p id="history-limit" class="muted"></p>
+            <details class="edit-box">
+              <summary>Разметка публикации <span data-entry-mode="manual"></span></summary>
+              <form id="tags-form">
+                <div id="tag-fields" class="form-grid"></div>
+                <button type="submit" class="primary">Сохранить теги</button>
+                <p id="tags-message" role="status"></p>
+              </form>
+            </details>
+            <details class="edit-box">
+              <summary>Гипотезы и варианты <span data-entry-mode="manual"></span></summary>
+              <div id="detail-experiments"></div>
+              <form id="link-experiment-form" class="form-grid">
+                <label>Гипотеза<select id="link-experiment"></select></label
+                ><label
+                  >Вариант<input
+                    id="link-variant"
+                    placeholder="A, B или control" /></label
+                ><button type="submit" class="outlined">Связать</button>
+              </form>
+            </details>
+          </section>
+          <section
+            id="view-import"
+            class="view"
+            hidden
+            aria-labelledby="import-title"
+          >
+            <div class="section-heading">
+              <h2 id="import-title">Добавить наблюдение</h2>
+              <span data-entry-mode="manual"></span>
+            </div>
+            <form id="observation-form" class="edit-box">
+              <div class="form-grid">
+                <label
+                  >Объект<select id="observation-kind">
+                    <option value="content">Публикация</option>
+                    <option value="account">Аккаунт</option>
+                  </select></label
+                ><label
+                  >Публикация / аккаунт<select
+                    id="observation-target"
+                    required
+                  ></select></label
+                ><label
+                  >Источник<select
+                    id="observation-source"
+                    required
+                  ></select></label
+                ><label
+                  >Время наблюдения<input
+                    id="observation-time"
+                    type="datetime-local"
+                    required /></label
+                ><label
+                  >Период<select id="observation-scope">
+                    <option value="">Не указан</option>
+                    <option value="lifetime">С момента публикации</option>
+                    <option value="range">Диапазон дат</option>
+                  </select></label
+                ><label
+                  >Состояние<select id="observation-status">
+                    <option value="manual">Внесено вручную</option>
+                    <option value="confirmed">Подтверждено</option>
+                    <option value="processing">Обрабатывается</option>
+                    <option value="unavailable">Недоступно</option>
+                    <option value="anomalous">Аномалия</option>
+                    <option value="estimated">Оценка</option>
+                  </select></label
+                >
+              </div>
+              <div id="observation-period" class="form-grid" hidden>
+                <label
+                  >Период с<input
+                    id="period-start"
+                    type="datetime-local" /></label
+                ><label
+                  >По<input id="period-end" type="datetime-local"
+                /></label>
+              </div>
+              <div id="observation-metrics" class="form-grid metric-form"></div>
+              <details id="retention-inputs">
+                <summary>Добавить удержание</summary>
+                <div class="form-grid">
+                  <label
+                    >Отвал на секунде<input
+                      id="retention-drop"
+                      type="number"
+                      min="0"
+                      step="0.000001" /></label
+                  ><label
+                    >Среднее время, сек.<input
+                      id="retention-average"
+                      type="number"
+                      min="0"
+                      step="0.000001" /></label
+                  ><label
+                    >Досмотр, %<input
+                      id="retention-completion"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.000001"
+                  /></label>
+                </div>
+              </details>
+              <details id="geo-inputs">
+                <summary>География</summary>
+                <label
+                  >Страны: код; название; процент<textarea
+                    id="observation-geo"
+                    rows="3"
+                    placeholder="LV;Латвия;25"
+                  ></textarea>
+                </label>
+                <p class="muted">
+                  Одна страна на строку. Пустой процент — нет данных.
+                </p>
+              </details>
+              <label
+                >Заметки<textarea id="observation-notes" rows="3"></textarea>
+              </label>
+              <p class="muted">
+                Поля необязательны. Пустое поле — нет данных.
+              </p>
+              <button type="submit" class="primary">Добавить в историю</button>
+              <p id="observation-message" role="status"></p>
+            </form>
+            <details class="edit-box">
+              <summary>Импорт JSON-отчёта</summary>
+              <form id="json-import-form">
+                <label
+                  >Файл отчёта JSON<input
+                    id="import-file"
+                    type="file"
+                    accept="application/json,.json"
+                    required
+                /></label>
+                <p id="import-preview" class="muted"></p>
+                <button
+                  id="import-submit"
+                  type="submit"
+                  class="outlined"
+                  disabled
+                >
+                  Импортировать весь отчёт
+                </button>
+                <p id="import-message" role="status"></p>
+              </form>
+              <p class="muted">
+                Повторный импорт создаёт дубликаты. Если в файле есть ошибка, отчёт не импортируется.
+              </p>
+            </details>
+          </section>
+          <section
+            id="view-experiments"
+            class="view"
+            hidden
+            aria-labelledby="experiments-title"
+          >
+            <div class="section-heading">
+              <h2 id="experiments-title">Гипотезы</h2>
+            </div>
+            <div id="experiment-list"></div>
+            <details class="edit-box">
+              <summary>Новая гипотеза <span data-entry-mode="manual"></span></summary>
+              <form id="experiment-form" class="form-grid">
+                <label>Название<input id="experiment-name" required /></label
+                ><label
+                  >Ключевой показатель<select id="experiment-metric"></select></label
+                ><label>Источник для проверки доступности<select id="experiment-source"><option value="">Все в текущей выборке</option><option value="instagram_api">Instagram API</option><option value="instagram_ui">Instagram Insights</option><option value="tiktok_api">TikTok API</option><option value="tiktok_studio">TikTok Studio</option><option value="manual">Вручную</option></select></label>
+                <p id="experiment-availability" class="wide muted" role="status"></p><label class="wide"
+                  >Гипотеза<textarea
+                    id="experiment-hypothesis"
+                    rows="3"
+                  ></textarea></label
+                ><label class="wide"
+                  >Заметки<textarea
+                    id="experiment-notes"
+                    rows="2"
+                  ></textarea></label
+                ><button type="submit" class="primary">Создать гипотезу</button>
+                <p id="experiment-message" role="status"></p>
+              </form>
+            </details>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog id="photo-dialog" class="photo-dialog" aria-labelledby="photo-title">
+      <div class="photo-panel">
+        <div class="photo-heading">
+          <h2 id="photo-title"></h2>
+          <button id="photo-close" type="button" class="outlined" autofocus aria-label="Закрыть фото">Закрыть ×</button>
+        </div>
+        <img referrerpolicy="no-referrer" decoding="async" alt="" />
+        <p id="photo-error" role="status" hidden>Фото недоступно. Ссылка могла истечь; она обновится при следующем сборе.</p>
+        <a id="photo-permalink" target="_blank" rel="noopener noreferrer" hidden>Открыть публикацию ↗</a>
+      </div>
+    </dialog>
+  </body>
+</html>

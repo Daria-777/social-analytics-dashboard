@@ -1,0 +1,63 @@
+# Opt-in Docker-only credentials. Do not combine with the host-bind override.
+services:
+  tiktok-credentials-init:
+    build: .
+    user: "0:0"
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes: &tiktok_volume
+      - type: volume
+        source: tiktok_credentials
+        target: /run/dash-tiktok/.tiktok-credentials
+        volume:
+          nocopy: true
+    command:
+      - python
+      - -c
+      - |
+        import os, stat
+        from pathlib import Path
+        p = Path('/run/dash-tiktok/.tiktok-credentials')
+        s = p.lstat()
+        if not stat.S_ISDIR(s.st_mode): raise SystemExit('Invalid credential directory')
+        if any(p.iterdir()):
+            if s.st_uid != 10001 or stat.S_IMODE(s.st_mode) != 0o700:
+                raise SystemExit('Existing credential directory refused')
+        else:
+            os.chown(p, 10001, 10001)
+            os.chmod(p, 0o700)
+        print('Private credential directory ready')
+  api:
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16777216"]
+    environment: &tiktok_private_environment
+      TIKTOK_ACCESS_TOKEN: ""
+      TIKTOK_CREDENTIAL_STORE: /run/dash-tiktok/.tiktok-credentials
+      TIKTOK_RENEWAL_RUNTIME: docker
+      TIKTOK_AUTO_REFRESH_ENABLED: ${TIKTOK_AUTO_REFRESH_ENABLED:-false}
+      TIKTOK_REFRESH_SKEW_SECONDS: ${TIKTOK_REFRESH_SKEW_SECONDS:-300}
+      TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+    volumes: *tiktok_volume
+    depends_on:
+      tiktok-credentials-init:
+        condition: service_completed_successfully
+  scheduler:
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16777216"]
+    environment: *tiktok_private_environment
+    volumes: *tiktok_volume
+    depends_on:
+      tiktok-credentials-init:
+        condition: service_completed_successfully
+volumes:
+  tiktok_credentials:
