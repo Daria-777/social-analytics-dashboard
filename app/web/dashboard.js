@@ -30,7 +30,7 @@ import {
   submit,
 } from "./dashboard-core.js";
 import { accountTimeline, publicationBars } from "./dashboard-charts.js";
-import { sortObservations, updateTimes, accountTrend } from "./dashboard-presentation.js";
+import { sortObservations, updateTimes } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
 import { openDetail } from "./dashboard-detail.js";
@@ -107,7 +107,7 @@ async function overview() {
           ["Просмотры профиля", fmt(s.profile_views)],
           ["Новые зрители", fmt(s.new_viewers)],
         ], true, latest.size > 1);
-      accountCard.append(accountTimeline(accountTrend(history, s)));
+      accountCard.append(accountTimeline(history, s));
       cards.push(accountCard);
     }
   }

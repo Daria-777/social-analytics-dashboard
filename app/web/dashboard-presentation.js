@@ -46,20 +46,44 @@ export function historyPoints(c, history) {
 }
 
 // Account counts compare only the same source, scope, period and quality.
-export function accountTrend(history, latest) {
+export function accountTrend(history, latest, key="followers") {
   const context = s => JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]);
   if (latest.metric_scope !== 'current') return {points:[],delta:null};
   const byTime = new Map();
   for (const s of history) {
-    const t = Date.parse(s.snapshot_at), value=s.followers;
+    const t = Date.parse(s.snapshot_at), value=s[key];
     if (context(s)!==context(latest) || !Number.isFinite(t) || value==null ||
         !['number','string'].includes(typeof value) || !Number.isFinite(Number(value)) || Number(value)<0) continue;
-    if (!byTime.has(t)) byTime.set(t,{...s,followers:Number(value)});
-    else if (byTime.get(t)?.followers!==Number(value)) byTime.set(t,null);
+    if (!byTime.has(t)) byTime.set(t,{...s,[key]:Number(value)});
+    else if (byTime.get(t)?.[key]!==Number(value)) byTime.set(t,null);
   }
   const points=[...byTime.values()].filter(Boolean).sort((a,b)=>Date.parse(a.snapshot_at)-Date.parse(b.snapshot_at));
   const last=points.at(-1);
-  const delta=points.length>1 && latest.followers!=null && last &&
-    Date.parse(last.snapshot_at)===Date.parse(latest.snapshot_at) ? last.followers-points[0].followers : null;
+  const delta=points.length>1 && latest[key]!=null && last &&
+    Date.parse(last.snapshot_at)===Date.parse(latest.snapshot_at) ? last[key]-points[0][key] : null;
   return {points,delta};
+}
+
+// Calendar weeks use the viewer's timezone, including DST and year boundaries.
+export function accountWeeks(points, timeZone, now = new Date(), key = "followers") {
+  if (!points.length) return [];
+  const day = 86400000;
+  const calendar = new Intl.DateTimeFormat('en-US', {timeZone, year:'numeric', month:'numeric', day:'numeric'});
+  const localDay = value => {
+    const parts=Object.fromEntries(calendar.formatToParts(new Date(value)).map(p=>[p.type,p.value]));
+    return Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day));
+  };
+  const monday = date => date - ((new Date(date).getUTCDay()+6)%7)*day;
+  const grouped=new Map();
+  for (const point of points) {
+    const start=monday(localDay(point.snapshot_at));
+    if (!grouped.has(start) || Date.parse(grouped.get(start).snapshot_at)<Date.parse(point.snapshot_at)) grouped.set(start,point);
+  }
+  const starts=[...grouped.keys()], current=monday(localDay(now));
+  const weeks=[];
+  for (let start=Math.min(...starts);start<=Math.max(...starts);start+=7*day) {
+    const snapshot=grouped.get(start);
+    weeks.push({start:new Date(start).toISOString().slice(0,10),end:new Date(start+6*day).toISOString().slice(0,10),value:snapshot?.[key]??null,snapshot:snapshot??null,current:start===current});
+  }
+  return weeks;
 }

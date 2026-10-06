@@ -51,3 +51,22 @@ assert.equal(accountTrend([early,late,{...late,followers:2}],late).points.length
 assert.equal(accountTrend([late,early],early).delta,null);
 assert.equal(accountTrend([late,{...early,followers:4}],late).delta,-2);
 console.log('Account overview: actual comparable counts, zero/unknown, duplicate timestamps and distinct sources/quality verified');
+
+const {accountWeeks}=await import('../app/web/dashboard-presentation.js');
+const weekly=(rows,tz='Europe/Moscow',now='2026-10-06T12:00:00Z')=>accountWeeks(accountTrend(rows,rows.at(-1)).points,tz,new Date(now));
+const weeklyInput=[a('2026-09-14T10:00:00Z',3),a('2026-09-21T10:00:00Z',0),a('2026-10-05T10:00:00Z',1),a('2026-10-06T10:00:00Z',2)];
+assert.deepEqual(weekly(weeklyInput).map(w=>[w.start,w.end,w.value,w.current]),[
+ ['2026-09-14','2026-09-20',3,false],['2026-09-21','2026-09-27',0,false],
+ ['2026-09-28','2026-10-04',null,false],['2026-10-05','2026-10-11',2,true]
+]);
+assert.equal(weekly([a('2026-10-05T10:00:00Z',3),a('2026-10-06T10:00:00Z',null)])[0].value,3);
+assert.equal(weekly([a('2026-10-04T22:30:00Z',1)])[0].start,'2026-10-05');
+assert.equal(weekly([a('2026-10-04T22:30:00Z',1)],'America/New_York')[0].start,'2026-09-28');
+assert.equal(weekly([a('2027-01-01T10:00:00Z',1)])[0].start,'2026-12-28');
+const dst=[a('2026-03-02T10:00:00Z',5),a('2026-03-09T10:00:00Z',4)];
+assert.deepEqual(weekly(dst,'America/New_York').map(w=>w.start),['2026-03-02','2026-03-09']);
+const following=[a('2026-10-01T10:00:00Z',0,{following:10}),a('2026-10-02T10:00:00Z',2,{following:8})];
+assert.equal(accountTrend(following,following.at(-1),'following').delta,-2);
+assert.equal(accountWeeks(accountTrend(following,following.at(-1),'following').points,'UTC',new Date('2026-10-06'),'following')[0].value,8);
+assert.deepEqual(accountWeeks([],'UTC'),[]);
+console.log('Weekly account history: last actual observation, gaps vs zero, timezone, DST, year boundary and metric selection passed');

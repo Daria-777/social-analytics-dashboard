@@ -1,6 +1,6 @@
-import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty} from './dashboard-core.js';
+import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state} from './dashboard-core.js';
 import {preview} from './dashboard-preview.js';
-import {chartGroups,historyPoints} from './dashboard-presentation.js';
+import {chartGroups,historyPoints,accountTrend,accountWeeks} from './dashboard-presentation.js';
 const ns='http://www.w3.org/2000/svg';
 const colors=['#067462','#a34f21','#365e83','#715b7f','#646a24'];
 const shapes=['circle','square','triangle','diamond'];
@@ -79,23 +79,55 @@ export function publicationBars(rows,key,contentLink) {
   return root;
 }
 
-export function accountTimeline({points,delta}) {
+export function accountTimeline(history, latest) {
   const root=node('section',null,'account-timeline');
-  root.append(node('h3','Динамика подписчиков'));
-  if(points.length<2) {
-    root.append(node('p','Для динамики нужны два сопоставимых замера','muted'));
+  root.append(node('h3','Динамика по неделям'));
+  if (latest.metric_scope !== 'current') {
+    root.append(node('p','Недельная история доступна для текущих показателей аккаунта','muted'));
     return root;
   }
-  if(delta!=null) root.append(node('p',`${delta>0?'+':''}${fmt(delta)} между замерами`,'account-change'));
-  const first=points[0],last=points.at(-1),start=Date.parse(first.snapshot_at),end=Date.parse(last.snapshot_at);
-  const max=Math.max(1,...points.map(s=>s.followers));
-  const svg=svgNode('svg',{viewBox:'0 0 340 160',role:'img','aria-label':'Подписчики по сохранённым замерам. Даты и значения доступны ниже.',class:'account-plot'});
-  for(const [value,y] of [[0,115],[max,25]]) svg.append(svgNode('line',{x1:52,x2:318,y1:y,y2:y,stroke:'#dce2d8'}),svgNode('text',{x:4,y:y+5},fmt(value,0)));
-  for(const [s,x] of [[first,52],[last,318]]) svg.append(svgNode('text',{x,y:146,'text-anchor':x===52?'start':'end'},date(s.snapshot_at).split(',')[0]));
-  for(const s of points) svg.append(marker(0,52+(Date.parse(s.snapshot_at)-start)/(end-start)*266,115-s.followers/max*90,4));
-  const numbers=node('details',null,'chart-values'),list=node('ul',null,'measured-points');
-  numbers.append(node('summary',`Замеры числами (${points.length})`),list);
-  for(const s of points) list.append(node('li',`${date(s.snapshot_at)} · ${fmt(s.followers)} подписчиков`));
-  root.append(svg,numbers);
+  const keys=['followers','following','views','unique_viewers','profile_views','new_viewers'];
+  const select=node('select'),label=node('label',null,'account-metric-select');
+  label.append(node('span','Показатель'),select);
+  const displayLabels={...labels,following:'Аккаунт подписан на',profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
+  for (const key of keys) {
+    const option=node('option',displayLabels[key]); option.value=key;
+    option.disabled=key!=='followers'&&!accountTrend(history,latest,key).points.length;
+    select.append(option);
+  }
+  const chart=node('div');root.append(label,chart);
+  function render() {
+    const key=select.value,{points}=accountTrend(history,latest,key);
+    chart.replaceChildren();
+    if (!points.length) {chart.append(node('p','Нет сохранённых замеров','muted'));return;}
+    const weeks=accountWeeks(points,state.config.display_timezone,new Date(),key);
+    chart.append(node('p','Последний замер каждой недели','muted'));
+    const scroll=node('div',null,'account-week-scroll');scroll.tabIndex=0;
+    scroll.setAttribute('role','region');scroll.setAttribute('aria-label',`${displayLabels[key]} по неделям`);
+    const list=node('ol',null,'account-weeks');
+    const max=Math.max(1,...weeks.map(w=>w.value??0));
+    const calendarDate=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'UTC',dateStyle:'short'}).format(new Date(value+'T12:00:00Z'));
+    for (const week of weeks) {
+      const column=node('li',null,'account-week');
+      column.append(node('strong',week.value==null?'—':fmt(week.value,0),'account-week-value'));
+      const svg=svgNode('svg',{viewBox:'0 0 64 144','aria-hidden':'true',class:'account-week-bar'});
+      svg.append(svgNode('line',{x1:0,x2:64,y1:140,y2:140,stroke:'#dce2d8'}));
+      if (week.value!=null) {
+        const height=week.value/max*132;
+        svg.append(svgNode('rect',{x:10,y:140-height,width:44,height,rx:3,fill:colors[0]}));
+      }
+      column.append(svg,node('span',calendarDate(week.start)+' –','week-date'),node('span',calendarDate(week.end),'week-date'));
+      if (week.current) column.append(node('span','Текущая неделя','week-note'));
+      if (week.value==null) column.append(node('span','Нет данных','week-note'));
+      list.append(column);
+    }
+    scroll.append(list);chart.append(scroll);
+    if (weeks.length===1) chart.append(node('p','Пока данные только за одну неделю','muted'));
+    const numbers=node('details',null,'chart-values'),values=node('ul',null,'measured-points');
+    numbers.append(node('summary',`Замеры числами (${points.length})`),values);
+    for (const point of points) values.append(node('li',`${date(point.snapshot_at)} · ${fmt(point[key],0)}`));
+    chart.append(numbers);
+  }
+  select.addEventListener('change',render);render();
   return root;
 }
