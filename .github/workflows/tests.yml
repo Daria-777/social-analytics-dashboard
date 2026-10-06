@@ -18,14 +18,19 @@ jobs:
       DATABASE_URL: postgresql+psycopg://test:test-only-password@localhost:5432/test_dash
       TEST_DATABASE_URL: postgresql+psycopg://test:test-only-password@localhost:5432/test_dash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: node tests/frontend_contract.mjs
+      - name: Frontend contracts across host timezones
+        run: |
+          for zone in UTC Europe/Moscow America/New_York Asia/Tokyo; do
+            TZ="$zone" node tests/frontend_contract.mjs
+          done
+          node tests/frontend_ux_contract.mjs
       - run: python -m pip install -r requirements.lock && python -m pip install --no-deps -e .
       - run: python -m tests.postgres_migrations
       - run: alembic upgrade head
