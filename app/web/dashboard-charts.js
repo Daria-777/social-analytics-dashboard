@@ -1,6 +1,6 @@
-import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state} from './dashboard-core.js';
+import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state,table} from './dashboard-core.js';
 import {preview} from './dashboard-preview.js';
-import {chartGroups,historyPoints,accountTrend,accountWeeks} from './dashboard-presentation.js';
+import {chartGroups,historyPoints,accountTrend,accountWeeks,accountDailyChanges,accountMetrics} from './dashboard-presentation.js';
 const ns='http://www.w3.org/2000/svg';
 const colors=['#067462','#a34f21','#365e83','#715b7f','#646a24'];
 const shapes=['circle','square','triangle','diamond'];
@@ -119,22 +119,40 @@ export function accountTimeline(history, latest) {
       column.append(svg,node('span',calendarDate(week.start)+' –','week-date'),node('span',calendarDate(week.end),'week-date'));
       if (week.current) column.append(node('span','Текущая неделя','week-note'));
       if (week.value==null) column.append(node('span','Нет данных','week-note'));
-      if (week.change?.delta) {
-        const {delta,from,to}=week.change;
-        const shortDate=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:state.config.display_timezone,day:'2-digit',month:'2-digit'}).format(new Date(value));
-        const change=node('span',`Изменение ${delta>0?'+':''}${fmt(delta,0)}`,'week-change');
-        change.title=`Разница между замерами ${date(from)} и ${date(to)}`;
-        column.append(change,node('span',shortDate(from)+' → '+shortDate(to),'week-note'));
-      }
       list.append(column);
     }
     scroll.append(list);chart.append(scroll);
     if (weeks.length===1) chart.append(node('p','Пока данные только за одну неделю','muted'));
-    const numbers=node('details',null,'chart-values'),values=node('ul',null,'measured-points');
-    numbers.append(node('summary',`Замеры числами (${points.length})`),values);
-    for (const point of points) values.append(node('li',`${date(point.snapshot_at)} · ${fmt(point[key],0)}`));
-    chart.append(numbers);
+
   }
   select.addEventListener('change',render);render();
+  return root;
+}
+
+
+export function accountChangesTable(history,latest,accountTitle) {
+  const root=node('section',null,'account-daily-changes');
+  const heading=node('h3');heading.append(accountTitle);root.append(heading);
+  const rows=accountDailyChanges(history,latest,state.config.display_timezone);
+  if(!rows.length) {root.append(node('p','Нет данных для сравнения','muted'));return root;}
+  root.append(node('p','Между последними замерами дней','muted'));
+  const dateOnly=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'UTC',dateStyle:'short'}).format(new Date(value+'T12:00:00Z'));
+  const displayLabels={...labels,following:'Подписки',profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
+  const values=rows.map(row=>[
+    row.start===row.end?dateOnly(row.end):dateOnly(row.start)+' → '+dateOnly(row.end),
+    ...accountMetrics.map(key=>{
+      const value=row.values[key],cell=node('span',value==null?'—':`${value>0?'+':''}${fmt(value,0)}`);
+      if(value!=null) {
+        const measured=row.observations[key];
+        cell.title=`Изменение между ${date(new Date(measured.from).toISOString())} и ${date(new Date(measured.to).toISOString())}`;
+      } else cell.title='Недостаточно данных для сравнения';
+      return cell;
+    })
+  ]);
+  const wrap=node('div',null,'table-wrap daily-growth-table');wrap.tabIndex=0;
+  wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Таблица изменений показателей по датам');
+  const grid=table(['Дата',...accountMetrics.map(key=>displayLabels[key])],values);
+  grid.prepend(node('caption','Чистое изменение показателей между последними замерами дней','sr-only'));
+  wrap.append(grid);root.append(wrap);
   return root;
 }

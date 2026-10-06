@@ -73,8 +73,16 @@ try {
  assert.equal(await page.locator('#account-cards .account-periods tbody tr').count(),5);
  assert.equal(await page.locator('#account-cards .account-periods tbody tr').first().getByText('999',{exact:true}).isVisible(),true);
  await periodSummary.click();
- await page.locator('#account-cards .account-week').nth(3).getByText('Изменение +2',{exact:true}).waitFor();
- await page.locator('#account-cards .account-week').nth(3).getByText('05.10 → 06.10',{exact:true}).waitFor();
+ assert.equal(await page.locator('#account-cards .week-change').count(),0);
+ const netChanges=page.locator('#account-changes .account-daily-changes');
+ await page.getByRole('heading',{name:'Изменения по датам',exact:true}).waitFor();
+ assert.equal(await netChanges.locator('tbody tr').count(),4);
+ assert.deepEqual(await netChanges.locator('tbody tr').first().locator('td').allTextContents(),['06.10.2026','+2','+2','—','—','—','—']);
+ assert.equal(await netChanges.locator('tbody tr').nth(1).locator('td').first().innerText(),'22.09.2026 → 05.10.2026');
+ assert.equal(await netChanges.locator('tbody tr').nth(1).locator('td').nth(1).innerText(),'0');
+ assert.equal(await netChanges.locator('tbody tr').nth(2).locator('td').nth(1).innerText(),'-3');
+ assert.equal(await netChanges.locator('tbody tr').last().locator('td').nth(1).innerText(),'—');
+ assert.equal(await page.locator('#account-cards').getByText('Замеры числами',{exact:false}).count(),0);
  const weeks=page.locator('#account-cards .account-week');
  assert.equal(await weeks.count(),4);
  assert.deepEqual(await weeks.locator('.account-week-value').allTextContents(),['3','0','—','2']);
@@ -87,9 +95,7 @@ try {
  assert.equal(await weeks.nth(3).locator('.account-week-value').innerText(),'4');
  assert.equal(await page.locator('#account-cards option[value=views]').evaluate(el=>el.disabled),true);
  await page.locator('#account-cards .account-metric-select select').selectOption('followers');
- await page.locator('#account-cards .chart-values summary').focus(); await page.keyboard.press('Enter');
- assert.equal(await page.locator('#account-cards .measured-points li').count(),4);
- await page.locator('#account-cards .chart-values summary').click();
+
  assert.equal(await page.locator('.collector-management').getAttribute('open'),null);
  await page.locator('#last-update').getByText('Последний сбор завершился с ошибкой; показаны сохранённые данные',{exact:true}).waitFor();
  await shot('ux-overview-desktop');
@@ -102,6 +108,8 @@ try {
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);
  await page.locator('#account-cards .account-week-scroll').focus(); await page.keyboard.press('ArrowRight');
  await shot('ux-overview-mobile');
+ await netChanges.locator('.daily-growth-table').focus();await page.keyboard.press('ArrowRight');
+ if(process.env.UX_SCREENSHOT_DIR) await netChanges.screenshot({path:path.join(process.env.UX_SCREENSHOT_DIR,'daily-changes-mobile.png')});
  if(process.env.UX_SCREENSHOT_DIR) await page.locator('#account-cards .account-timeline').screenshot({path:path.join(process.env.UX_SCREENSHOT_DIR,'weekly-chart-mobile.png')});
  await page.setViewportSize({width:320,height:740});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true);

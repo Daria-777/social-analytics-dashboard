@@ -100,3 +100,44 @@ export function accountOverview(history, platform) {
   const primary=current.find(s=>s.source===platform+'_api')??current[0]??null;
   return {primary,additional:rows.filter(s=>s!==primary)};
 }
+
+export const accountMetrics=['followers','following','views','unique_viewers','profile_views','new_viewers'];
+
+// Day-end observations, never gross follows/unfollows or interpolated daily events.
+export function accountDailyChanges(history, latest, timeZone) {
+  if(latest.metric_scope!=='current') return [];
+  const context=s=>JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]);
+  const calendar=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'});
+  const localDay=value=>{
+    const parts=Object.fromEntries(calendar.formatToParts(new Date(value)).map(p=>[p.type,p.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+  const valid=value=>value!=null&&['number','string'].includes(typeof value)&&String(value).trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=0?Number(value):null;
+  const moments=new Map();
+  for(const s of history) {
+    const at=Date.parse(s.snapshot_at);
+    if(context(s)!==context(latest)||!Number.isFinite(at)) continue;
+    if(!moments.has(at)) moments.set(at,{at,values:Object.fromEntries(accountMetrics.map(key=>[key,valid(s[key])]))});
+    else for(const key of accountMetrics) if(moments.get(at).values[key]!==valid(s[key])) moments.get(at).values[key]=null;
+  }
+  const days=new Map();
+  for(const point of [...moments.values()].sort((a,b)=>a.at-b.at)) days.set(localDay(point.at),point);
+  const rows=new Map(),previous=new Map();
+  const nextDay=value=>new Date(Date.parse(value+'T12:00:00Z')+86400000).toISOString().slice(0,10);
+  for(const [day,point] of days) {
+    let changed=false;
+    for(const key of accountMetrics) {
+      const value=point.values[key],before=previous.get(key);
+      if(value!=null&&before) {
+        const start=nextDay(before.day),end=day,id=start+'/'+end;
+        if(!rows.has(id)) rows.set(id,{start,end,values:{},observations:{}});
+        rows.get(id).values[key]=value-before.value;
+        rows.get(id).observations[key]={from:before.at,to:point.at};
+        changed=true;
+      }
+      if(value!=null) previous.set(key,{day,value,at:point.at});
+    }
+    if(!changed) rows.set(day+'/'+day,{start:day,end:day,values:{},observations:{}});
+  }
+  return [...rows.values()].sort((a,b)=>b.end.localeCompare(a.end)||b.start.localeCompare(a.start));
+}

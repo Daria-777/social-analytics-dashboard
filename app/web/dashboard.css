@@ -824,7 +824,11 @@ body:has(.photo-dialog[open]) { overflow: hidden; }
 .week-date { display: block; font-size: 0.875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .account-periods { margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
 .account-periods summary { min-height: 44px; }
-.week-change { display: block; font-size: 0.75rem; font-variant-numeric: tabular-nums; margin-top: 0.5rem; }
+.account-daily-changes { margin-top: 1.25rem; }
+.account-daily-changes h3 { display: flex; align-items: center; font-size: 1rem; margin: 0 0 0.5rem; }
+.daily-growth-table table { min-width: 650px; }
+.daily-growth-table td { font-variant-numeric: tabular-nums; }
+.daily-growth-table td:first-child { white-space: nowrap; }
 .week-note { display: block; font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
 .publication-card { padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); min-width: 0; }
 .publication-heading { display: flex; align-items: start; gap: 0.75rem; }

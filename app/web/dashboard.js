@@ -29,7 +29,7 @@ import {
   activeContent,
   submit,
 } from "./dashboard-core.js";
-import { accountTimeline, publicationBars } from "./dashboard-charts.js";
+import { accountTimeline, accountChangesTable, publicationBars } from "./dashboard-charts.js";
 import { sortObservations, updateTimes, accountOverview } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
@@ -90,7 +90,7 @@ async function overview() {
   const histories = await Promise.all(
     selected.map(async (a) => [a, await all(`/accounts/${a.id}/history`)]),
   );
-  const cards = [];
+  const cards = [], changes = [];
   state.accountMeasurements = [];
   for (const [a, history] of histories) {
     const {primary:s,additional}=accountOverview(history,a.platform);
@@ -103,7 +103,10 @@ async function overview() {
         ["Просмотры профиля", fmt(s.profile_views)],
         ["Новые зрители", fmt(s.new_viewers)],
       ], true) : node('article',null,'observation-card');
-    if(s) accountCard.append(accountTimeline(history,s));
+    if(s) {
+      accountCard.append(accountTimeline(history,s));
+      changes.push(accountChangesTable(history,s,platformContext(a.platform,`@${a.username}`)));
+    }
     else accountCard.append(platformContext(a.platform,`@${a.username}`),empty('Нет текущих показателей аккаунта'));
     if(additional.length) {
       const details=node('details',null,'account-periods'),wrap=node('div',null,'table-wrap');
@@ -125,6 +128,8 @@ async function overview() {
           ),
         ]),
   );
+  put("account-changes",...changes);
+  $("account-changes-section").hidden = !changes.length;
   const [health, runs] = await Promise.all([
     api("/collectors/status"),
     api("/collectors/runs?limit=100"),
