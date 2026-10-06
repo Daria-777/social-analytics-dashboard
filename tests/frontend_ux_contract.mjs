@@ -36,3 +36,18 @@ const cover = 'https://p16-common-sign.tiktokcdn-eu.com/a.image?refresh_token=ab
 assert.equal(previewURL(cover),cover);
 for (const bad of [cover.replace('ab12cd34','rft.secret'),cover.replace('tiktokcdn-eu.com','cdninstagram.com'),cover+'&access_token=secret',cover+'&refresh_token=ab12cd34']) assert.equal(previewURL(bad),null);
 console.log('TikTok CDN marker allowed only on signed provider URLs; OAuth query credentials rejected');
+
+const {accountTrend}=await import('../app/web/dashboard-presentation.js');
+const a=(snapshot_at,followers,extra={})=>({source:'instagram_api',metric_scope:'current',snapshot_status:'confirmed',snapshot_at,followers,...extra});
+const early=a('2026-10-01T10:00:00Z',0), late=a('2026-10-02T10:00:00Z',2);
+assert.equal(accountTrend([late,early],late).delta,2);
+assert.equal(accountTrend([early],early).delta,null);
+assert.equal(accountTrend([early,late,a('2026-10-03T10:00:00Z',null)],a('2026-10-03T10:00:00Z',null)).delta,null);
+assert.equal(accountTrend([early,{...late,source:'instagram_ui'}],early).points.length,1);
+assert.equal(accountTrend([early,{...late,snapshot_status:'estimated'}],early).points.length,1);
+assert.equal(accountTrend([early,{...late,metric_scope:'range'}],early).points.length,1);
+assert.equal(accountTrend([early,late,{...late,followers:3}],late).delta,null);
+assert.equal(accountTrend([early,late,{...late,followers:2}],late).points.length,2);
+assert.equal(accountTrend([late,early],early).delta,null);
+assert.equal(accountTrend([late,{...early,followers:4}],late).delta,-2);
+console.log('Account overview: actual comparable counts, zero/unknown, duplicate timestamps and distinct sources/quality verified');

@@ -16,7 +16,7 @@ try {
  ];
  const rows=contents.map((content,i)=>({content,snapshot:{id:'s'+i,source:i===2?'tiktok_api':'instagram_api',metric_scope:'lifetime',snapshot_status:'confirmed',snapshot_at:'2026-10-05T16:00:00Z',views:[25,0,null][i],likes:[2,null,1][i],shares:0},derived:{average_watch_pct:null}}));
  const account={id:'account',platform:'instagram',username:'fixture'};
- const posted=[]; let experiments=[]; let connected=true; let history=[rows[0].snapshot]; let retention=[];
+ const posted=[]; let experiments=[]; let connected=true; let history=[rows[0].snapshot]; let retention=[]; let accountHistory=[{source:'instagram_api',metric_scope:'current',snapshot_status:'confirmed',snapshot_at:'2026-10-05T16:00:00Z',followers:0,following:2}];
  const summaries=Object.fromEntries(['views','average_watch_pct','completion_rate','share_rate','save_rate','profile_visit_rate','follow_conversion'].map(k=>[k,{n:k==='views'?2:0,mean:k==='views'?12.5:null,median:k==='views'?12.5:null,guardrail:'insufficient_sample'}]));
  await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url()),p=url.pathname;
@@ -36,7 +36,7 @@ try {
   else if(p==='/accounts') payload=connected?[account]:[];
   else if(p==='/content') payload=contents;
   else if(p==='/experiments') payload=experiments;
-  else if(p==='/accounts/account/history') payload=[{source:'instagram_api',metric_scope:'current',snapshot_status:'confirmed',snapshot_at:'2026-10-05T16:00:00Z',followers:0,following:2}];
+  else if(p==='/accounts/account/history') payload=accountHistory;
   else if(p==='/collectors/status') payload={instagram:{last_success_at:'2026-10-05T16:00:00Z',last_status:'success'},tiktok:{last_status:'failed'}};
   else if(p==='/collectors/runs') payload=[];
   else if(p==='/analytics/content-comparison') {
@@ -53,15 +53,23 @@ try {
  const section=name=>page.locator(`[data-view="${name}"]`).first();
  const shot=async name=>{if(process.env.UX_SCREENSHOT_DIR) await page.screenshot({path:path.join(process.env.UX_SCREENSHOT_DIR,name+'.png'),fullPage:true});};
  await page.goto('http://127.0.0.1:8770/dashboard');
- await page.locator('#recent-content .publication-card').first().waitFor();
+ await page.locator('#account-cards .observation-card').first().waitFor();
+ assert.equal(await page.locator('#view-overview .publication-card').count(),0);
+ assert.equal(await page.locator('#filter-disclosure').isVisible(),false);
  await page.locator('#account-cards').getByRole('img',{name:'Instagram',exact:true}).waitFor();
- assert.ok((await page.locator('#recent-content').boundingBox()).y<(await page.locator('#account-cards').boundingBox()).y);
+ await page.locator('#account-cards').getByText('Для динамики нужны два сопоставимых замера').waitFor();
+ accountHistory.push({...accountHistory[0],snapshot_at:'2026-10-06T16:00:00Z',followers:2});
+ await page.locator('#refresh').click();
+ await page.locator('#account-cards').getByText('+2 между замерами',{exact:true}).waitFor();
+ await page.locator('#account-cards .chart-values summary').focus(); await page.keyboard.press('Enter');
+ assert.equal(await page.locator('#account-cards .measured-points li').count(),2);
  assert.equal(await page.locator('.collector-management').getAttribute('open'),null);
  await page.locator('#last-update').getByText('Последний сбор завершился с ошибкой; показаны сохранённые данные',{exact:true}).waitFor();
  await shot('ux-overview-desktop');
  await page.setViewportSize({width:390,height:844});
  await page.waitForFunction(()=>!document.getElementById('filter-disclosure').open);
- const firstCount=await page.locator('#recent-content .metric-value').first().boundingBox();
+ await page.evaluate(()=>window.scrollTo(0,0));
+ const firstCount=await page.locator('#account-cards .metric-value').first().boundingBox();
  assert.ok(firstCount.y>=0&&firstCount.y+firstCount.height<844,`First counter below mobile fold: ${JSON.stringify(firstCount)}`);
  assert.equal(await page.evaluate(()=>window.scrollY),0);
  await shot('ux-overview-mobile');
@@ -230,10 +238,12 @@ try {
  const record=posted.find(r=>r.path==='/manual-snapshots/import').body.content_snapshots[0];
  assert.equal(record.views,0); assert.equal(record.watch_time_avg_seconds,'12.5'); assert.equal(record.completion_rate,null);
  contents.splice(0); await page.reload();
- await page.locator('#recent-content').getByText('Публикаций пока нет',{exact:true}).waitFor();
- assert.ok(!(await page.locator('#recent-content').innerText()).includes('Аккаунт ещё не подключён'));
+ await section('content').click();
+ await page.locator('#content-cards').getByText('Публикаций пока нет',{exact:true}).waitFor();
+ assert.ok(!(await page.locator('#content-cards').innerText()).includes('Аккаунт ещё не подключён'));
  connected=false; await page.reload();
- await page.locator('#recent-content').getByText('Аккаунт ещё не подключён',{exact:true}).waitFor();
+ await section('content').click();
+ await page.locator('#content-cards').getByText('Аккаунт ещё не подключён',{exact:true}).waitFor();
  assert.deepEqual(errors,[]);
  console.log('UX browser: mobile first counter, filters, comparison cards, separate bar panels, zero/missing values, single/multiple history points, matching legends, keyboard/touch values, late windows, metric/save and empty states passed');
 } finally {await browser.close();}

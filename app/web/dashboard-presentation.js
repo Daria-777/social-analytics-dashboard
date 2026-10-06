@@ -44,3 +44,22 @@ export function historyPoints(c, history) {
     return s.views != null && ['number','string'].includes(typeof s.views) && Number.isFinite(Number(s.views)) && Number(s.views)>=0 && Number.isFinite(age) && age>=0 ? [{...s,age}] : [];
   });
 }
+
+// Account counts compare only the same source, scope, period and quality.
+export function accountTrend(history, latest) {
+  const context = s => JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]);
+  if (latest.metric_scope !== 'current') return {points:[],delta:null};
+  const byTime = new Map();
+  for (const s of history) {
+    const t = Date.parse(s.snapshot_at), value=s.followers;
+    if (context(s)!==context(latest) || !Number.isFinite(t) || value==null ||
+        !['number','string'].includes(typeof value) || !Number.isFinite(Number(value)) || Number(value)<0) continue;
+    if (!byTime.has(t)) byTime.set(t,{...s,followers:Number(value)});
+    else if (byTime.get(t)?.followers!==Number(value)) byTime.set(t,null);
+  }
+  const points=[...byTime.values()].filter(Boolean).sort((a,b)=>Date.parse(a.snapshot_at)-Date.parse(b.snapshot_at));
+  const last=points.at(-1);
+  const delta=points.length>1 && latest.followers!=null && last &&
+    Date.parse(last.snapshot_at)===Date.parse(latest.snapshot_at) ? last.followers-points[0].followers : null;
+  return {points,delta};
+}

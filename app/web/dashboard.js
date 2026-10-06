@@ -29,8 +29,8 @@ import {
   activeContent,
   submit,
 } from "./dashboard-core.js";
-import { publicationBars } from "./dashboard-charts.js";
-import { sortObservations, updateTimes } from "./dashboard-presentation.js";
+import { accountTimeline, publicationBars } from "./dashboard-charts.js";
+import { sortObservations, updateTimes, accountTrend } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
 import { openDetail } from "./dashboard-detail.js";
@@ -40,8 +40,8 @@ import {
   renderExperiments,
 } from "./dashboard-forms.js";
 const headings = {
-  overview: "Аналитика аккаунтов",
-  content: "Публикации и их история",
+  overview: "Обзор аккаунтов",
+  content: "Аналитика публикаций",
   comparison: "Сравнение публикаций",
   import: "Наблюдения",
   experiments: "Гипотезы",
@@ -60,7 +60,9 @@ export function view(name) {
       else b.removeAttribute("aria-current");
     });
   $("page-title").textContent = headings[name];
-  $("filter-disclosure").hidden = ["detail", "import", "experiments"].includes(name);
+  $("filter-disclosure").hidden = ["overview", "detail", "import", "experiments"].includes(name);
+  $("active-filters").hidden = name !== "content" && name !== "comparison";
+  if (state.comparison) renderUpdateInfo();
   $("main-content").focus();
 }
 document.querySelectorAll("[data-entry-mode]").forEach((el) => {
@@ -84,10 +86,7 @@ function contentLink(c) {
   return b;
 }
 async function overview() {
-  const selected = state.accounts.filter(
-    (a) =>
-      !$("filter-platform").value || a.platform === $("filter-platform").value,
-  );
+  const selected = state.accounts;
   const histories = await Promise.all(
     selected.map(async (a) => [a, await all(`/accounts/${a.id}/history`)]),
   );
@@ -95,34 +94,21 @@ async function overview() {
   state.accountMeasurements = [];
   for (const [a, history] of histories) {
     const latest = new Map();
-    history
-      .filter(
-        (s) =>
-          !$("filter-source").value || s.source === $("filter-source").value,
-      )
-      .forEach((s) =>
-        latest.set(
-          JSON.stringify([
-            s.source,
-            s.metric_scope,
-            s.source_period_start,
-            s.source_period_end,
-          ]),
-          s,
-        ),
-      );
+    [...history].sort((x,y)=>Date.parse(x.snapshot_at)-Date.parse(y.snapshot_at)).forEach((s) =>
+      latest.set(JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]),s)
+    );
     for (const s of latest.values()) {
       state.accountMeasurements.push({platform:a.platform,at:s.snapshot_at});
-      cards.push(
-        card(platformContext(a.platform, `@${a.username}`), s, [
+      const accountCard = card(platformContext(a.platform, `@${a.username}`), s, [
           ["Подписчики", fmt(s.followers)],
           ["Аккаунт подписан на", fmt(s.following)],
           ["Просмотры", fmt(s.views)],
           ["Уникальные зрители", fmt(s.unique_viewers)],
           ["Просмотры профиля", fmt(s.profile_views)],
           ["Новые зрители", fmt(s.new_viewers)],
-        ], true, latest.size > 1),
-      );
+        ], true, latest.size > 1);
+      accountCard.append(accountTimeline(accountTrend(history, s)));
+      cards.push(accountCard);
     }
   }
   put(
@@ -313,8 +299,7 @@ function renderContent() {
   put("content-table", contentTable(["views", "likes", "shares"], true));
   put("content-full-table", contentTable(contentKeys));
   $("content-count").textContent = `${new Set(rows.map(r=>r.content.id)).size} публикаций · ${state.comparison.rows.length} последних наблюдений${state.comparison.truncated ? " · выборка ограничена 1000; сузьте фильтры" : ""}`;
-  const ids = new Set([...new Set(sortObservations(rows, "date").map(r=>r.content.id))].slice(0,6));
-  put("recent-content", ...(rows.length ? sortObservations(rows,"date").filter(r=>ids.has(r.content.id)).map(r=>publicationCard(r,true)) : [selectionEmpty()]));
+
 }
 function renderUpdateInfo() {
   const rows = [...(state.accountMeasurements || []), ...state.comparison.rows.map(r=>({platform:r.content.platform,at:r.snapshot.snapshot_at}))];
@@ -327,7 +312,7 @@ function renderUpdateInfo() {
     const health = state.collectionHealth?.[p];
     info.append(platformContext(p, `Измерение: ${date(measured.latest)} · Успешный сбор: ${date(health?.last_success_at)}`));
   }
-  const warnings = Object.entries(state.collectionHealth || {}).filter(([p])=>!$("filter-platform").value || p===$("filter-platform").value).flatMap(([p,s]) => s.last_status === "failed" || s.last_status === "partial" ? [platformContext(p,s.last_status === "failed" ? "Последний сбор завершился с ошибкой; показаны сохранённые данные" : "Последний сбор неполный; часть показателей могла не обновиться")] : []);
+  const warnings = Object.entries(state.collectionHealth || {}).filter(([p])=>state.view === "overview" || !$("filter-platform").value || p===$("filter-platform").value).flatMap(([p,s]) => s.last_status === "failed" || s.last_status === "partial" ? [platformContext(p,s.last_status === "failed" ? "Последний сбор завершился с ошибкой; показаны сохранённые данные" : "Последний сбор неполный; часть показателей могла не обновиться")] : []);
   put("last-update", node("p", times.latest ? `Последнее обновление данных: ${date(times.latest)}` : "Время обновления пока неизвестно", "muted"), ...warnings, ...(platforms.length ? [info] : []));
 }
 function renderComparison() {
@@ -499,6 +484,7 @@ $("logout").addEventListener("click", async () => {
 });
 setupPreview();
 setupForms(refresh);
+view("overview");
 (async () => {
   try {
     state.config = { ...(await api("/dashboard/config")), display_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" };

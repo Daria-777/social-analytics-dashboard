@@ -52,7 +52,7 @@ try {
  });
 
  await page.goto('http://127.0.0.1:8770/dashboard');
- await page.locator('#recent-content .publication-card').first().waitFor();
+ await page.locator('#account-cards .observation-card').first().waitFor();
  const tz=process.env.TIMEZONE_TEST_ID||'America/New_York';
  const expected=tz==='Asia/Tokyo'?'06.10.2026, 01:00':'05.10.2026, 12:00';
  await page.locator('#last-update > p').getByText(expected,{exact:false}).waitFor();

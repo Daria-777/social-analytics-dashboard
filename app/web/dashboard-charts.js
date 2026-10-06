@@ -1,4 +1,4 @@
-import {node,put,fmt,metric,labels,provenance,platformMark,dataContext,empty} from './dashboard-core.js';
+import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty} from './dashboard-core.js';
 import {preview} from './dashboard-preview.js';
 import {chartGroups,historyPoints} from './dashboard-presentation.js';
 const ns='http://www.w3.org/2000/svg';
@@ -76,5 +76,26 @@ export function publicationBars(rows,key,contentLink) {
     });
     root.append(panel);
   });
+  return root;
+}
+
+export function accountTimeline({points,delta}) {
+  const root=node('section',null,'account-timeline');
+  root.append(node('h3','Динамика подписчиков'));
+  if(points.length<2) {
+    root.append(node('p','Для динамики нужны два сопоставимых замера','muted'));
+    return root;
+  }
+  if(delta!=null) root.append(node('p',`${delta>0?'+':''}${fmt(delta)} между замерами`,'account-change'));
+  const first=points[0],last=points.at(-1),start=Date.parse(first.snapshot_at),end=Date.parse(last.snapshot_at);
+  const max=Math.max(1,...points.map(s=>s.followers));
+  const svg=svgNode('svg',{viewBox:'0 0 340 160',role:'img','aria-label':'Подписчики по сохранённым замерам. Даты и значения доступны ниже.',class:'account-plot'});
+  for(const [value,y] of [[0,115],[max,25]]) svg.append(svgNode('line',{x1:52,x2:318,y1:y,y2:y,stroke:'#dce2d8'}),svgNode('text',{x:4,y:y+5},fmt(value,0)));
+  for(const [s,x] of [[first,52],[last,318]]) svg.append(svgNode('text',{x,y:146,'text-anchor':x===52?'start':'end'},date(s.snapshot_at).split(',')[0]));
+  for(const s of points) svg.append(marker(0,52+(Date.parse(s.snapshot_at)-start)/(end-start)*266,115-s.followers/max*90,4));
+  const numbers=node('details',null,'chart-values'),list=node('ul',null,'measured-points');
+  numbers.append(node('summary',`Замеры числами (${points.length})`),list);
+  for(const s of points) list.append(node('li',`${date(s.snapshot_at)} · ${fmt(s.followers)} подписчиков`));
+  root.append(svg,numbers);
   return root;
 }
