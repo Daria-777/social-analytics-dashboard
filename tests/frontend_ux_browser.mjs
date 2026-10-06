@@ -78,7 +78,7 @@ try {
  await page.getByRole('heading',{name:'Изменения по датам',exact:true}).waitFor();
  assert.equal(await netChanges.locator('tbody tr').count(),4);
  assert.deepEqual(await netChanges.locator('tbody tr').first().locator('td').allTextContents(),['06.10.2026','+2','+2','—','—','—','—']);
- assert.equal(await netChanges.locator('tbody tr').nth(1).locator('td').first().innerText(),'22.09.2026 → 05.10.2026');
+ assert.equal(await netChanges.locator('tbody tr').nth(1).locator('td').first().innerText(),'21.09.2026 → 05.10.2026');
  assert.equal(await netChanges.locator('tbody tr').nth(1).locator('td').nth(1).innerText(),'0');
  assert.equal(await netChanges.locator('tbody tr').nth(2).locator('td').nth(1).innerText(),'-3');
  assert.equal(await netChanges.locator('tbody tr').last().locator('td').nth(1).innerText(),'—');
@@ -99,6 +99,7 @@ try {
  assert.equal(await page.locator('.collector-management').getAttribute('open'),null);
  await page.locator('#last-update').getByText('Последний сбор завершился с ошибкой; показаны сохранённые данные',{exact:true}).waitFor();
  await shot('ux-overview-desktop');
+ if(process.env.UX_SCREENSHOT_DIR) await page.locator('#account-changes-section').screenshot({path:path.join(process.env.UX_SCREENSHOT_DIR,'daily-changes-desktop.png')});
  await page.setViewportSize({width:390,height:844});
  await page.waitForFunction(()=>!document.getElementById('filter-disclosure').open);
  await page.evaluate(()=>window.scrollTo(0,0));

@@ -92,9 +92,9 @@ const day4=a('2026-10-04T16:00:00Z',10,{following:5}),day5=a('2026-10-05T16:00:0
 assert.deepEqual(daily([day4,day5,day6]).map(r=>[r.start,r.end,r.values.followers,r.values.following]),[['2026-10-06','2026-10-06',-1,2],['2026-10-05','2026-10-05',3,-1],['2026-10-04','2026-10-04',undefined,undefined]]);
 assert.equal(daily([day4,a('2026-10-05T10:00:00Z',11),a('2026-10-05T17:00:00Z',14)])[0].values.followers,4);
 const gap=daily([day4,a('2026-10-07T16:00:00Z',13)])[0];
-assert.deepEqual([gap.start,gap.end,gap.values.followers],['2026-10-05','2026-10-07',3]);
+assert.deepEqual([gap.start,gap.end,gap.values.followers],['2026-10-04','2026-10-07',3]);
 const missing=daily([day4,a('2026-10-05T16:00:00Z',null),a('2026-10-06T16:00:00Z',13)]);
-assert.deepEqual([missing[0].start,missing[0].end,missing[0].values.followers],['2026-10-05','2026-10-06',3]);
+assert.deepEqual([missing[0].start,missing[0].end,missing[0].values.followers],['2026-10-04','2026-10-06',3]);
 assert.equal(daily([day4,a('2026-10-05T16:00:00Z',10)])[0].values.followers,0);
 assert.equal(daily([a('2026-10-04T16:00:00Z',0),a('2026-10-05T16:00:00Z',3)])[0].values.followers,3);
 assert.equal(daily([day4,day5,{...day5,followers:15}])[0].values.followers,undefined);

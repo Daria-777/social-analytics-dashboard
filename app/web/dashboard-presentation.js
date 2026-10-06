@@ -129,7 +129,7 @@ export function accountDailyChanges(history, latest, timeZone) {
     for(const key of accountMetrics) {
       const value=point.values[key],before=previous.get(key);
       if(value!=null&&before) {
-        const start=nextDay(before.day),end=day,id=start+'/'+end;
+        const start=nextDay(before.day)===day?day:before.day,end=day,id=start+'/'+end;
         if(!rows.has(id)) rows.set(id,{start,end,values:{},observations:{}});
         rows.get(id).values[key]=value-before.value;
         rows.get(id).observations[key]={from:before.at,to:point.at};
