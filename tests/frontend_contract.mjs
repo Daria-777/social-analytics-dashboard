@@ -8,6 +8,13 @@ const source = fs.readFileSync(
 const core = await import(
   "data:text/javascript;base64," + Buffer.from(source).toString("base64")
 );
+// The initial timezone follows the browser/runtime; fixed expectations below
+// must set their fixture timezone explicitly instead of relying on the host.
+assert.equal(
+  core.state.config.display_timezone,
+  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+);
+core.state.config.display_timezone = "Europe/Moscow";
 assert.equal(core.metric(4.1, "completion_rate"), "4,1");
 assert.equal(core.metric(0.041, "share_rate"), "4,1%");
 assert.equal(core.metric(null, "completion_rate"), "—");
