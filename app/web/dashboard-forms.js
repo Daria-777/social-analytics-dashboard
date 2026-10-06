@@ -14,6 +14,11 @@ import {
   button,
   table,
   title,
+  platformMark,
+  collectionMode,
+  collectionMark,
+  period,
+  setViewNotes,
   localInput,
   utc,
   submit,
@@ -250,7 +255,7 @@ export function setupForms(refresh) {
       snapshot_status: $("observation-status").value,
       metric_scope: $("observation-scope").value || null,
       notes: $("observation-notes").value || null,
-      raw_payload: { entry_method: "dashboard" },
+      raw_payload: { entry_method: "dashboard", collection_method: "manual" },
     };
     record[kind === "content" ? "platform_content_id" : "platform_account_id"] =
       kind === "content"
@@ -414,4 +419,67 @@ export function setupForms(refresh) {
     );
     $("import-submit").dataset.locked = "true";
   });
+}
+
+
+// This list uses all accounts/publications, independently of hidden comparison filters.
+export function renderManualMeasurements(data, accountRows, openContent) {
+  const manualSources = new Set(["instagram_ui", "tiktok_studio", "manual"]);
+  const rows = data.rows.filter(r => manualSources.has(r.snapshot.source));
+  setViewNotes("import", [...rows.map(r=>({name:title(r.content),snapshot:r.snapshot})),...accountRows.map(r=>({name:(r.account.platform==="tiktok"?"TikTok":"Instagram")+" @"+r.account.username,snapshot:r.snapshot}))], rows.length ? [...(rows.every(r=>r.snapshot.metric_scope==="lifetime") && !rows.some(r=>r.snapshot.notes?.includes("с момента публикации")) ? ["Показатели публикаций — с момента публикации."] : []), "Прочерк означает отсутствие данных; 0 — измеренное нулевое значение."] : []);
+  const methods = new Set([...rows, ...accountRows].map(r => collectionMode(r.snapshot)));
+  $("observation-collection-mode").replaceChildren(collectionMark(methods.size === 1 ? [...methods][0] : methods.size ? "mixed" : "agent"));
+  const box = $("manual-measurements");
+  box.replaceChildren();
+  if (!rows.length && !accountRows.length) {
+    box.append(empty("Наблюдений пока нет", "Поручите AI-агенту прочитать Insights и Studio или добавьте показатели самостоятельно."));
+    return;
+  }
+  const wrap = (headers, values, label) => {
+    const region = node("div", null, "table-wrap");
+    region.tabIndex = 0;
+    region.setAttribute("role", "region");
+    region.setAttribute("aria-label", label);
+    const grid = table(headers, values);
+    grid.querySelectorAll("th").forEach(th => th.scope = "col");
+    region.append(grid);
+    return region;
+  };
+  const context = (s, name) => {
+    const cell = node("div");
+    cell.append(name);
+    if (s.snapshot_status === "anomalous") cell.append(node("p", "Аномалия", "data-warning"));
+    return cell;
+  };
+  for (const source of manualSources) {
+    const selected = rows.filter(r => r.snapshot.source === source);
+    const accounts = accountRows.filter(r => r.snapshot.source === source);
+    if (!selected.length && !accounts.length) continue;
+    const section = node("section", null, "edit-box");
+    const heading = node("h3");
+    const platform = selected[0]?.content.platform || accounts[0]?.account.platform;
+    if (source !== "manual") heading.append(platformMark(platform));
+    heading.append(document.createTextNode(sources[source]));
+    section.append(heading);
+    if (selected.length) {
+      const mixedPeriods = selected.some(r=>r.snapshot.metric_scope!=="lifetime");
+      section.append(node("h4", "Публикации"), wrap(
+        ["Публикация", ...(mixedPeriods ? ["Период"] : []), "Просмотры", "Среднее, сек.", "Досмотр, %"],
+        selected.map(({content: c, snapshot: s}) => [
+          context(s, button(title(c), () => openContent(c, s.source), "title-link")),
+          ...(mixedPeriods ? [period(s)] : []), fmt(s.views), fmt(s.watch_time_avg_seconds), fmt(s.completion_rate),
+        ]), sources[source] + ": публикации"));
+    }
+    if (accounts.length) {
+      section.append(node("h4", "Аккаунты"), wrap(
+        ["Аккаунт", "Период", "Подписчики", "Просмотры", "Зрители", "Посещения профиля"],
+        accounts.map(({account: a, snapshot: s}) => [
+          context(s, node("strong", "@" + a.username)),
+          s.raw_payload?.displayed_period || period(s),
+          fmt(s.followers), fmt(s.views), fmt(s.unique_viewers), fmt(s.profile_views),
+        ]), sources[source] + ": аккаунты"));
+    }
+    box.append(section);
+  }
+  if (data.truncated) box.append(node("p", "Показана часть последних измерений; полная история доступна в публикациях.", "data-warning"));
 }

@@ -115,3 +115,64 @@ assert.deepEqual(accountPeriodInsights([periodRow,revised,{...periodRow,source:'
 assert.equal(accountPeriodInsights([{...periodRow,views:0}], 'instagram_api')[0].views,0);
 assert.deepEqual(accountPeriodInsights([{...periodRow,views:null},{...periodRow,views:''}], 'instagram_api'),[]);
 console.log('Focused account metrics: following hidden; dated period totals retain source, period, zero and latest revision');
+
+const {accountPeriodDay}=await import('../app/web/dashboard-presentation.js');
+assert.equal(accountPeriodDay(periodRow),'2026-10-01');
+assert.equal(accountPeriodDay({...periodRow,source_period_end:'2026-10-01T23:59:59Z'}),'2026-10-01');
+assert.equal(accountPeriodDay({...periodRow,source_period_end:'2026-10-03T00:00:00Z'}),null);
+assert.equal(accountPeriodDay({...periodRow,source_period_start:'2026-10-01T01:00:00Z'}),null);
+console.log('Reporting days: exact UTC single days; wider or shifted intervals remain periods');
+
+assert.equal(accountPeriodInsights([{...periodRow,views:null,likes:0}], 'instagram_api')[0].likes,0);
+
+const {accountDailyMetrics}=await import('../app/web/dashboard-presentation.js');
+const totals=(day,views)=>({...periodRow,source_period_start:`2026-10-0${day}T00:00:00Z`,source_period_end:`2026-10-0${day}T23:59:59Z`,views});
+const unified=accountDailyMetrics([day4,day5,day6,totals(4,7),totals(5,21)],day6,'instagram_api');
+assert.equal(unified.length,3);
+assert.equal(unified[1].values.followers,3);assert.equal(unified[1].activity.views,21);
+assert.equal(unified[2].values.followers,undefined);assert.equal(unified[2].activity.views,7);
+const unknownVsZero=accountDailyMetrics([day4,{...day5,followers:10}],{...day5,followers:10},'instagram_api');
+assert.equal(unknownVsZero[0].values.followers,0);assert.equal(unknownVsZero[1].values.followers,undefined);
+const unmerged=accountDailyMetrics([day4,{...day6,followers:13},totals(6,21)],{...day6,followers:13},'instagram_api');
+assert.equal(unmerged.find(row=>row.start==='2026-10-04'&&row.end==='2026-10-06').activity,null);
+assert.equal(unmerged.find(row=>row.start==='2026-10-06'&&row.end==='2026-10-06').values.followers,undefined);
+const utc=accountDailyMetrics([a('2026-10-03T20:00:00Z',0),a('2026-10-03T22:00:00Z',0),a('2026-10-04T10:00:00Z',0)],a('2026-10-04T10:00:00Z',0),'instagram_api');
+assert.equal(utc[0].values.followers,0);assert.equal(utc.at(-1).start,'2026-10-03');assert.equal(utc.at(-1).values.followers,undefined);
+const tt=accountDailyMetrics([{...day4,source:'tiktok_api',likes:2},{...day5,source:'tiktok_api',likes:2}],{...day5,source:'tiktok_api',likes:2},'tiktok_api');
+assert.equal(tt[0].values.followers,3);assert.ok(tt.every(row=>row.activity===null));
+console.log('Unified days: observed follower changes and isolated day totals align on UTC; unknown stays unknown; gaps never absorb one-day totals; TikTok cumulative likes are not day totals');
+
+const {comparisonSelection,comparisonFormat}=await import('../app/web/dashboard-presentation.js');
+const compareRow=(id,value,opts={})=>({content:{id,platform:opts.platform||'tiktok',format:opts.format||'Короткое видео',hook_type:opts.hook||'Личная история',published_at:'2026-10-01T10:00:00Z'},snapshot:{source:opts.source||'tiktok_studio',snapshot_status:opts.status||'confirmed',metric_scope:opts.scope||'lifetime',snapshot_at:opts.at||'2026-10-06T11:00:00Z',views:value},derived:{}});
+const observationRows=[compareRow('one',10),compareRow('one',9,{at:'2026-10-05T11:00:00Z'}),compareRow('one',999,{source:'tiktok_api'}),compareRow('two',0),compareRow('unknown',null,{hook:'Вопрос'}),compareRow('bad',40,{status:'anomalous'}),compareRow('photo',100,{format:'Карусель'}),compareRow('range',70,{scope:'range'}),compareRow('other',800,{platform:'instagram'})];
+const selection={platform:'tiktok',source:'tiktok_studio',format:'Короткое видео',key:'views',groupBy:'hook_type'};
+const compared=comparisonSelection(observationRows,selection);
+assert.equal(compared.groups.length,2);assert.equal(compared.groups[0].mean,5);assert.equal(compared.groups[0].n,2);assert.equal(compared.groups[1].mean,null);
+assert.equal(compared.anomalies,1);assert.equal(compared.periods,1);assert.equal(compared.total,4);assert.equal(compared.available,2);
+const publicationRanking=comparisonSelection(observationRows,{...selection,groupBy:'publication'});
+assert.deepEqual(publicationRanking.groups.map(g=>[g.group,g.mean]),[['one',10],['two',0],['unknown',null]]);
+const laterAnomaly=comparisonSelection([compareRow('one',10),compareRow('one',99,{status:'anomalous',at:'2026-10-07T11:00:00Z'})],selection);
+assert.equal(laterAnomaly.groups.length,0);assert.equal(laterAnomaly.anomalies,1); // Never silently reuse the old clean value.
+assert.equal(comparisonSelection(observationRows,{...selection,from:Date.parse('2026-10-02T00:00:00Z')}).total,0);
+assert.equal(comparisonSelection([compareRow('a',5,{status:'estimated'}),compareRow('b',7)],selection).otherQuality,1);
+assert.equal(comparisonFormat({content_type:'carousel'}),'Карусель');
+console.log('Comparison: unique publications, explicit source/platform/format, quality separation, zero/unknown, date limits, anomalies and latest-value selection passed');
+
+// The publication list chooses one complete source, including when values differ.
+const {publicationSelection}=await import('../app/web/dashboard-presentation.js');
+const apiRow={...make('post',25),snapshot:{...make('post',25).snapshot,snapshot_at:'2026-10-05T16:00:00Z'}};
+const studioRow={...apiRow,snapshot:{...apiRow.snapshot,source:'instagram_ui',views:30,likes:4,completion_rate:50,snapshot_at:'2026-10-06T16:00:00Z'}};
+const duplicateRows=[studioRow,apiRow];
+assert.deepEqual(publicationSelection(duplicateRows),[apiRow]);
+assert.deepEqual(publicationSelection([...duplicateRows].reverse()),[apiRow]);
+assert.equal(apiRow.snapshot.likes,undefined); // No filling from the other source.
+assert.deepEqual(publicationSelection(duplicateRows,{source:'instagram_ui'}),[studioRow]);
+assert.deepEqual(publicationSelection(duplicateRows,{key:'completion_rate'}),[studioRow]);
+assert.deepEqual(publicationSelection([{...apiRow,snapshot:{...apiRow.snapshot,views:null}},studioRow]),[studioRow]);
+assert.deepEqual(publicationSelection([{...apiRow,snapshot:{...apiRow.snapshot,views:0}},studioRow])[0].snapshot.views,0);
+assert.deepEqual(publicationSelection([{...apiRow,snapshot:{...apiRow.snapshot,snapshot_status:'unavailable'}},studioRow]),[studioRow]);
+assert.deepEqual(publicationSelection([apiRow,{...studioRow,snapshot:{...studioRow.snapshot,metric_scope:'range',source_period_start:'2026-10-05',source_period_end:'2026-10-06'}}]),[apiRow]);
+assert.deepEqual(publicationSelection([apiRow,{...apiRow,snapshot:{...apiRow.snapshot,views:28,snapshot_at:'2026-10-06T16:00:00Z'}}])[0].snapshot.views,28);
+assert.deepEqual(publicationSelection([{content:{id:'no-data'},snapshot:null}]).map(r=>r.content.id),['no-data']);
+assert.equal(duplicateRows.length,2);
+console.log('Publication selection: one complete observation, API priority, explicit source, metric fallback, quality, period, zero and history preserved');

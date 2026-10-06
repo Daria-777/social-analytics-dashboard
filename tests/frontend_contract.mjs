@@ -86,4 +86,19 @@ console.log(
 for (const source of ["instagram_api", "tiktok_api"]) assert.equal(core.collectionMode(source), "automatic");
 for (const source of ["instagram_ui", "tiktok_studio", "manual"]) assert.equal(core.collectionMode(source), "manual");
 for (const source of [null, undefined, "", "future_provider", "confirmed", "estimated"]) assert.equal(core.collectionMode(source), "unknown");
+assert.equal(core.collectionMode({source:"tiktok_studio",collection_method:"agent"}),"agent");
+assert.equal(core.collectionMode({source:"instagram_ui",raw_payload:{agent_run_id:"run-1"}}),"agent");
+assert.equal(core.collectionMode({source:"instagram_ui",raw_payload:{entry_method:"dashboard"}}),"manual");
+assert.equal(core.collectionMode({source:"instagram_ui"}),"unknown");
+assert.equal(core.collectionMode({source:"tiktok_api",raw_payload:{agent_run_id:"run-1"}}),"automatic");
 console.log("Collection mode: API, UI/manual and unknown sources remain distinct from quality statuses");
+
+// Shared notes appear once; dates and decimals survive sentence segmentation.
+const notes=core.noteGroups([
+ {name:"A",snapshot:{notes:"Проверено 06.10.2026. Среднее 3.73 секунды. Особенность A."}},
+ {name:"B",snapshot:{notes:"Проверено 06.10.2026. Среднее 3.73 секунды. Особенность B."}},
+ {name:"A",snapshot:{notes:"Проверено 06.10.2026. Среднее 3.73 секунды. Особенность A."}},
+]);
+assert.deepEqual(notes.filter(n=>n.names.length===2).map(n=>n.text),["Проверено 06.10.2026.","Среднее 3.73 секунды."]);
+assert.equal(notes.filter(n=>n.text==="Особенность A.").length,1);
+assert.equal(notes.filter(n=>n.text==="Особенность B.").length,1);

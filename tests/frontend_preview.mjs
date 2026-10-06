@@ -64,7 +64,7 @@ try {
   content.preview_url = "https://s.cdninstagram.com/expired.svg";
   await page.reload();
   await page.locator('[data-view="content"]').first().click();
-  await page.locator("#content-cards").getByText("Фото недоступно", { exact: true }).waitFor({ state: "visible" });
+  await page.locator("#content-cards").getByRole("button", { name: "Загрузить фото: Тестовая публикация" }).waitFor({ state: "visible" });
   content.platform = 'tiktok'; content.preview_url = null;
   await page.reload();
   await page.locator('[data-view="content"]').first().click();
@@ -76,6 +76,26 @@ try {
   await dialog.waitFor({state:'visible'});
   assert.equal(await page.locator('#photo-dialog img').getAttribute('src'),'/content/fixture/preview');
   await page.keyboard.press('Escape');
+  // Temporary TikTok failure leaves an accessible recovery, with no automatic loop.
+  let unavailable = true, requests = 0;
+  await page.route('**/content/fixture/preview*', route => {
+    requests++;
+    return route.fulfill(unavailable ? {status:503,body:''} : {contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="60" height="80"/>'});
+  });
+  await page.reload();
+  await page.locator('[data-view="content"]').first().click();
+  const retry = page.locator('#content-cards').getByRole('button',{name:'Загрузить фото: Тестовая публикация'});
+  await retry.waitFor();
+  const failedRequests = requests;
+  await page.waitForTimeout(200);
+  assert.equal(requests, failedRequests, 'Must not retry without user action');
+  unavailable = false;
+  await retry.focus(); await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('#content-cards .content-preview img')?.naturalWidth>0);
+  assert.equal(requests, failedRequests+1);
+  assert.equal(await page.locator('#content-cards .content-preview').evaluate(el=>document.activeElement===el),true);
+  await page.locator('#content-cards .content-preview').click();
+  await dialog.waitFor({state:'visible'});
   assert.deepEqual(errors, []);
   console.log("Photo preview: click, keyboard, focus return, Escape, backdrop, close, mobile and expired image passed");
 } finally { await browser.close(); }

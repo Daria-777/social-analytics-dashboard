@@ -65,3 +65,20 @@ def test_latest_observation_per_source_period_and_aggregate_units(client,content
     assert group['comparable_period'] is True and group['sample_size']==1
     assert group['metrics']['completion_rate']['mean']==4.1 and group['metrics']['completion_rate']['n']==1
     assert client.post('/manual-snapshots/content',json={**base,'metric_scope':'range'}).status_code==422
+
+
+@pytest.mark.parametrize('source,raw,expected', [
+    ('tiktok_api', {'agent_run_id':'test'}, 'automatic'),
+    ('tiktok_studio', {'agent_run_id':'test'}, 'agent'),
+    ('tiktok_studio', {'collection_method':'ai_agent'}, 'agent'),
+    ('tiktok_studio', {'entry_method':'dashboard'}, 'manual'),
+    ('tiktok_studio', {'agent_run_id':42}, 'unknown'),
+    ('tiktok_studio', {}, 'unknown'),
+])
+def test_safe_collection_provenance(client,content,source,raw,expected):
+    raw = raw | {'access_token':'PRIVATE-NOT-EXPOSED'}
+    assert client.post('/content-snapshots',json={'content_id':content['id'],'snapshot_at':'2026-01-01T12:00:00Z','source':source,'raw_payload':raw}).status_code == 201
+    response = client.get('/analytics/content-comparison')
+    assert response.json()['rows'][0]['snapshot']['collection_method'] == expected
+    assert 'raw_payload' not in response.json()['rows'][0]['snapshot']
+    assert 'PRIVATE-NOT-EXPOSED' not in response.text

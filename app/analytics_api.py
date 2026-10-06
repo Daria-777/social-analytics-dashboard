@@ -26,8 +26,16 @@ def latest_snapshots(source=None,date_from=None,date_to=None):
     return query.subquery()
 
 
+def collection_method(snapshot):
+    if snapshot.source in ('instagram_api', 'tiktok_api'): return 'automatic'
+    raw = snapshot.raw_payload or {}
+    if raw.get('collection_method') == 'ai_agent' or isinstance(raw.get('agent_run_id'), str) and raw['agent_run_id'].strip(): return 'agent'
+    if raw.get('collection_method') == 'manual' or raw.get('entry_method') == 'dashboard': return 'manual'
+    return 'unknown'
+
+
 def serialize(content,snapshot):
-    return {'content':s.ContentRead.model_validate(content).model_dump(mode='json'),'snapshot':s.ContentSnapshotRead.model_validate(snapshot).model_dump(mode='json',exclude={'raw_payload'}),'derived':derived_metrics(content,snapshot),'comparable_period':comparable(snapshot)}
+    return {'content':s.ContentRead.model_validate(content).model_dump(mode='json'),'snapshot':s.ContentSnapshotRead.model_validate(snapshot).model_dump(mode='json',exclude={'raw_payload'}) | {'collection_method': collection_method(snapshot)},'derived':derived_metrics(content,snapshot),'comparable_period':comparable(snapshot)}
 
 
 @router.get('/analytics/content-comparison')

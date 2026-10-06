@@ -143,7 +143,7 @@ export function accountDailyChanges(history, latest, timeZone) {
 }
 
 // Actual period totals, never differences of cumulative counters or cross-source sums.
-export const accountPeriodMetrics=['views','unique_viewers','profile_views','new_viewers'];
+export const accountPeriodMetrics=['views','likes','comments','shares','saves','unique_viewers','profile_views','new_viewers'];
 export function accountPeriodInsights(history, source) {
   const latest=new Map();
   for(const row of history) {
@@ -154,4 +154,87 @@ export function accountPeriodInsights(history, source) {
     if(!latest.has(context)||at>Date.parse(latest.get(context).snapshot_at)) latest.set(context,row);
   }
   return [...latest.values()].sort((a,b)=>Date.parse(b.source_period_end)-Date.parse(a.source_period_end)||Date.parse(b.snapshot_at)-Date.parse(a.snapshot_at));
+}
+
+// Label one requested UTC reporting day, including exclusive and inclusive end bounds.
+export function accountPeriodDay(row) {
+  const start=Date.parse(row.source_period_start),end=Date.parse(row.source_period_end);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||start%86400000!==0||![86399000,86400000].includes(end-start)) return null;
+  return new Date(start).toISOString().slice(0,10);
+}
+
+// Align account observations and provider day totals on the same UTC calendar.
+// Multi-day differences and non-daily reporting periods remain separate interval rows.
+export function accountDailyMetrics(history, latest, source) {
+  const rows=latest?accountDailyChanges(history,latest,'UTC')
+    .filter(row=>row.values.followers!=null||!Object.keys(row.values).length)
+    .map(row=>({...row,activity:null,daily:true})):[];
+  for(const activity of accountPeriodInsights(history,source)) {
+    const day=accountPeriodDay(activity);
+    const existing=day&&rows.find(row=>row.daily&&row.start===day&&row.end===day&&!row.activity);
+    if(existing) existing.activity=activity;
+    else rows.push({start:day??new Date(activity.source_period_start).toISOString().slice(0,10),end:day??new Date(activity.source_period_end).toISOString().slice(0,10),values:{},observations:{},activity,daily:day!=null});
+  }
+  return rows.sort((a,b)=>b.end.localeCompare(a.end)||b.start.localeCompare(a.start));
+}
+
+
+// Pick a whole observation per publication; never combine metrics from different sources.
+export function publicationSelection(rows, {source="", key="views"} = {}) {
+  const selected = new Map();
+  const rank = r => {
+    const s = r.snapshot;
+    if (!s) return [1, 1, 1, 1, 3, 0];
+    const value = r.derived?.[key] ?? s[key];
+    const known = value != null && ["number", "string"].includes(typeof value) && String(value).trim() && Number.isFinite(Number(value));
+    return [
+      ["confirmed", "manual", "estimated"].includes(s.snapshot_status) ? 0 : 1,
+      s.metric_scope === "lifetime" && !s.source_period_start && !s.source_period_end ? 0 : 1,
+      known ? 0 : 1,
+      ["instagram_api", "tiktok_api"].includes(s.source) ? 0 : 1,
+      ({confirmed:0, manual:1, estimated:2})[s.snapshot_status] ?? 3,
+      -(Date.parse(s.snapshot_at) || 0),
+    ];
+  };
+  const compare = (a, b) => {
+    const left = rank(a), right = rank(b);
+    for (let i = 0; i < left.length; i++) if (left[i] !== right[i]) return left[i] - right[i];
+    return 0;
+  };
+  for (const row of rows) {
+    if (source && row.snapshot?.source !== source) continue;
+    const previous = selected.get(row.content.id);
+    if (!previous || compare(row, previous) < 0) selected.set(row.content.id, row);
+  }
+  return [...selected.values()];
+}
+
+// A comparison is one platform/source/format and one quality level, never a union of sources.
+export function comparisonFormat(content) {
+  return content.format || ({reel:"Короткое видео",video:"Короткое видео",carousel:"Карусель",photo:"Фото",story:"История"})[content.content_type] || "Не указан";
+}
+export function comparisonSelection(rows, {platform, source, format, key, groupBy="publication", from=null, to=null}) {
+  const selected=rows.filter(r=>r.content.platform===platform && r.snapshot.source===source && comparisonFormat(r.content)===format &&
+    (from==null || Date.parse(r.content.published_at)>=from) && (to==null || Date.parse(r.content.published_at)<=to));
+  const latest=new Map();
+  let periods=0;
+  for(const r of selected) {
+    const s=r.snapshot;
+    if(s.metric_scope!=="lifetime" || s.source_period_start || s.source_period_end) {periods++; continue;}
+    if(!latest.has(r.content.id) || Date.parse(s.snapshot_at)>Date.parse(latest.get(r.content.id).snapshot.snapshot_at)) latest.set(r.content.id,r);
+  }
+  const candidates=[...latest.values()];
+  const quality=["confirmed","manual","estimated"].find(status=>candidates.some(r=>r.snapshot.snapshot_status===status));
+  const excluded=candidates.filter(r=>r.snapshot.snapshot_status!==quality);
+  const groups=new Map();
+  for(const r of candidates.filter(r=>r.snapshot.snapshot_status===quality)) {
+    const group=groupBy==="publication" ? r.content.id : r.content[groupBy] || null;
+    if(!groups.has(group)) groups.set(group,{group,rows:[],values:[]});
+    const g=groups.get(group), value=r.derived?.[key] ?? r.snapshot[key];
+    g.rows.push(r);
+    if(value!=null && ["number","string"].includes(typeof value) && String(value).trim() && Number.isFinite(Number(value))) g.values.push(Number(value));
+  }
+  const results=[...groups.values()].map(g=>({...g,n:g.values.length,mean:g.values.length ? g.values.reduce((a,b)=>a+b,0)/g.values.length : null}));
+  results.sort((a,b)=>a.mean==null ? b.mean==null ? 0 : 1 : b.mean==null ? -1 : b.mean-a.mean);
+  return {groups:results,quality,periods,anomalies:excluded.filter(r=>r.snapshot.snapshot_status==="anomalous").length,otherQuality:excluded.filter(r=>r.snapshot.snapshot_status!=="anomalous").length,total:candidates.length,available:results.reduce((n,g)=>n+g.n,0)};
 }

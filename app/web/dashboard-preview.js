@@ -28,10 +28,30 @@ export function preview(c) {
   image.loading = "lazy";
   image.decoding = "async";
   image.referrerPolicy = "no-referrer";
-  image.addEventListener("error", () => b.replaceWith(node("span", "Фото недоступно", "preview-placeholder")), { once: true });
+  let failed = false, attempts = 0;
+  image.addEventListener("error", () => {
+    failed = true;
+    b.classList.add("preview-placeholder");
+    b.setAttribute("aria-label", "Загрузить фото: " + title(c));
+    b.replaceChildren(node("span", attempts ? "Не загрузилось. Повторить" : "Загрузить фото"));
+  });
+  image.addEventListener("load", () => {
+    failed = false;
+    b.classList.remove("preview-placeholder");
+    b.setAttribute("aria-label", "Увеличить фото: " + title(c));
+    if (b.firstChild !== image) b.replaceChildren(image);
+  });
   image.src = url;
   b.append(image);
-  b.addEventListener("click", () => openPreview(c, url));
+  b.addEventListener("click", () => {
+    if (!failed) { openPreview(c, url); return; }
+    attempts++;
+    failed = false;
+    b.classList.remove("preview-placeholder");
+    b.replaceChildren(image);
+    // User initiated retry only. The server's provider cooldown remains in force.
+    image.src = url + (url.startsWith("/") ? "?retry=" + attempts : "");
+  });
   return b;
 }
 
@@ -45,6 +65,11 @@ function openPreview(c, url) {
   image.alt = "Фото или обложка публикации: " + title(c);
   image.onerror = () => { image.hidden = true; error.hidden = false; };
   image.src = url;
+  let retry = 0;
+  error.querySelector("button").onclick = () => {
+    error.hidden = true; image.hidden = false;
+    image.src = url + (url.startsWith("/") ? "?retry=" + ++retry : "");
+  };
   const link = document.getElementById("photo-permalink");
   link.hidden = true;
   link.removeAttribute("href");

@@ -1,8 +1,7 @@
 import {
   $,
   platformMark,
-  collectionMark,
-  collectionMode,
+  setViewNotes,
   state,
   sources,
   statuses,
@@ -28,7 +27,6 @@ import { exactWindow } from "./dashboard-presentation.js";
 import { preview } from "./dashboard-preview.js";
 function observationSource(s, text) {
   const context = node("div", null, "observation-source");
-  if (collectionMode(s.source) !== "automatic") context.append(collectionMark(collectionMode(s.source)));
   context.append(node("div", text));
   return context;
 }
@@ -46,8 +44,8 @@ const tags = {
   production_version: "Версия",
   notes: "Заметки",
 };
-export async function openDetail(id) {
-  const source = $("filter-source").value,
+export async function openDetail(id, sourceOverride) {
+  const source = sourceOverride ?? $("filter-source").value,
     q = source ? "?source=" + source : "";
   const [data, history, retention, experiments] = await Promise.all([
     api(`/analytics/content/${id}${q}`),
@@ -56,7 +54,9 @@ export async function openDetail(id) {
     api(`/content/${id}/experiments`),
   ]);
   state.detail = data.content;
+  state.detailSource = source;
   const c = data.content;
+  setViewNotes("detail", [...history,...retention,...data.latest.map(r=>r.snapshot)].map(snapshot=>({name:title(c),snapshot})), ["Прочерк означает отсутствие данных; 0 — измеренное нулевое значение."]);
   put("detail-preview", preview(c));
   $("detail-title").textContent = title(c);
   const types = {video:"Видео",photo:"Фото",reel:"Reel",story:"История",carousel:"Карусель",other:"Другая публикация"};
@@ -77,7 +77,7 @@ export async function openDetail(id) {
     "detail-metrics",
     ...(data.latest.length
       ? data.latest.map((r) =>
-          card(sources[r.snapshot.source], r.snapshot, [
+          card(sources[r.snapshot.source]+(data.latest.filter(x=>x.snapshot.source===r.snapshot.source).length>1 ? " · "+period(r.snapshot) : ""), r.snapshot, [
             ["Просмотры", fmt(r.snapshot.views)],
             ["Уникальные", fmt(r.snapshot.unique_viewers)],
             ["Досмотр, %", fmt(r.snapshot.completion_rate)],

@@ -199,12 +199,7 @@ export function card(title, s, fields, compact = false, multiple = false) {
   const name = node("strong");
   name.append(title instanceof Node ? title : document.createTextNode(title));
   heading.append(name);
-  if (!compact) {
-    if (collectionMode(s.source) !== "automatic") heading.append(collectionMark(collectionMode(s.source)));
-    if (s.snapshot_status !== "manual" || collectionMode(s.source) !== "manual") heading.append(status(s.snapshot_status));
-  }
   c.append(heading);
-  if (!compact) c.append(node("p", provenance(s), "card-provenance"));
   const strip = node("div", null, "metric-strip");
   fields.forEach(([label, value]) => {
     const m = node("div");
@@ -215,7 +210,7 @@ export function card(title, s, fields, compact = false, multiple = false) {
     strip.append(m);
   });
   c.append(strip);
-  if (compact) c.append(dataContext(s, multiple));
+  c.append(dataContext(s, compact && multiple));
   return c;
 }
 export function title(c) {
@@ -259,7 +254,7 @@ export const filterMap = {
 export function query() {
   const q = new URLSearchParams({
     limit: "1000",
-    group_by: $("comparison-group").value,
+    group_by: $("comparison-group").value === "publication" ? "hook_type" : $("comparison-group").value,
   });
   Object.entries(filterMap).forEach(([id, key]) => {
     if ($("filter-" + id).value) q.set(key, $("filter-" + id).value);
@@ -339,17 +334,24 @@ export function briefPeriod(s) {
 }
 // Entry method follows provenance, independently of quality or collector health.
 export function collectionMode(source) {
+  if (source && typeof source === "object") {
+    const s = source, raw = s.raw_payload || {};
+    if (["instagram_api", "tiktok_api"].includes(s.source)) return "automatic";
+    if (s.collection_method === "agent" || raw.collection_method === "ai_agent" || typeof raw.agent_run_id === "string" && raw.agent_run_id.trim()) return "agent";
+    if (s.collection_method === "manual" || raw.collection_method === "manual" || raw.entry_method === "dashboard") return "manual";
+    return "unknown";
+  }
   if (["instagram_api", "tiktok_api"].includes(source)) return "automatic";
   if (["instagram_ui", "tiktok_studio", "manual"].includes(source)) return "manual";
   return "unknown";
 }
 export function collectionMark(mode) {
-  const names = {automatic:"Автоматически", manual:"Вручную"};
+  const names = {automatic:"API", agent:"AI-агент", assisted:"AI-агент / самостоятельно", manual:"Самостоятельный ввод", unknown:"Insights / Studio", mixed:"Разные способы сбора"};
   const mark = node("span", null, "collection-mark");
   mark.dataset.collectionMode = names[mode] ? mode : "unknown";
-  if (names[mode]) {
+  if (["automatic", "agent", "assisted", "manual"].includes(mode)) {
     const image = node("img");
-    image.src = `/dashboard/assets/collection-${mode}.svg`;
+    image.src = `/dashboard/assets/collection-${mode === "assisted" ? "agent" : mode}.svg`;
     image.alt = "";
     image.width = image.height = 16;
     mark.append(image);
@@ -357,14 +359,65 @@ export function collectionMark(mode) {
   mark.append(node("span", names[mode] || "Способ не указан"));
   return mark;
 }
-export function dataContext(s) {
+// Source/period remains visible only where multiple observations need distinguishing.
+export function dataContext(s, multiple = false) {
   const box = node("div", null, "data-context");
-  box.append(node("p", briefPeriod(s), "period-label"));
-  if (collectionMode(s.source) !== "automatic") box.append(collectionMark(collectionMode(s.source)));
+  if (multiple) box.append(node("p", `${sources[s.source] || s.source} · ${briefPeriod(s)}`, "period-label"));
   const warnings = {estimated:"Значение оценено",anomalous:"Есть сомнения в точности",processing:"Данные ещё обрабатываются",unavailable:"Показатели недоступны"};
   if (warnings[s.snapshot_status]) box.append(node("p", warnings[s.snapshot_status], "data-warning"));
-  const details = node("details", null, "data-details");
-  details.append(node("summary", "О данных"), node("p", provenance(s), "card-provenance"), status(s.snapshot_status));
-  box.append(details);
   return box;
+}
+// Factor identical sentences without splitting dates, decimals or abbreviations.
+export function noteGroups(entries) {
+  const groups = new Map(), segmenter = new Intl.Segmenter("ru", {granularity:"sentence"});
+  for (const {name, snapshot:s} of entries) {
+    for (const {segment} of segmenter.segment(s.notes || "")) {
+      const text = segment.trim(); if (!text) continue;
+      if (!groups.has(text)) groups.set(text, {names:new Set(), sources:new Set()});
+      groups.get(text).names.add(name);
+      if(s.source) groups.get(text).sources.add(sources[s.source] || s.source);
+    }
+  }
+  return [...groups].map(([text,group])=>({text,names:[...group.names],sources:[...group.sources]}));
+}
+export function setViewNotes(view, entries = [], common = []) {
+  state.viewNotes ||= {};
+  state.viewNotes[view] = {entries, common};
+  if (state.view === view) renderViewNotes();
+}
+export function renderViewNotes() {
+  const footer = $("view-notes"), body = $("view-notes-body");
+  if (!footer || !body) return;
+  const {entries,common} = state.viewNotes?.[state.view] || {entries:[],common:[]};
+  body.replaceChildren(); footer.hidden = !entries.length && !common.length;
+  for (const text of new Set(common)) body.append(node("p", text));
+  const groups = noteGroups(entries), shared = groups.filter(g=>g.names.length>1);
+  const allSources = new Set(entries.map(e=>sources[e.snapshot.source] || e.snapshot.source)), sharedSections=new Map();
+  for (const g of shared) {
+    const scope=g.sources.length < allSources.size ? g.sources.join(" · ") : "";
+    if(!sharedSections.has(scope)) {
+      const section=node("div",null,"note-item");if(scope) section.append(node("strong",scope));
+      sharedSections.set(scope,section);body.append(section);
+    }
+    sharedSections.get(scope).append(node("p",g.text));
+  }
+  const specific = new Map();
+  for (const g of groups.filter(g=>g.names.length===1)) {
+    const name=g.names[0]; if(!specific.has(name)) specific.set(name,[]);
+    specific.get(name).push(g.text);
+  }
+  for(const [name,texts] of specific) {
+    const item=node("div",null,"note-item"); item.append(node("strong",name),node("p",texts.join(" ")));body.append(item);
+  }
+  const seen = new Set(), records=[];
+  for (const {name,snapshot:s} of entries) {
+    const record=[name,provenance(s),statuses[s.snapshot_status] || s.snapshot_status || "—"];
+    const key=JSON.stringify(record);if(seen.has(key)) continue;seen.add(key);records.push(record);
+  }
+  if(records.length) {
+    const details=node("details"),wrap=node("div",null,"table-wrap");wrap.tabIndex=0;
+    wrap.setAttribute("role","region");wrap.setAttribute("aria-label","Источники и время измерений");
+    details.append(node("summary","Источники и время измерений"));
+    wrap.append(table(["Публикация / аккаунт","Измерение","Состояние"],records)); details.append(wrap);body.append(details);
+  }
 }

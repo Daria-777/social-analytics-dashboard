@@ -30,7 +30,7 @@ def privacy(): return FileResponse(WEB/'privacy.html')
 
 
 @router.get('/dashboard/assets/{name}',include_in_schema=False)
-def assets(name:Literal['dashboard.css','dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-forms.js','dashboard-preview.js','dashboard-presentation.js','dashboard-charts.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','favicon.svg']): return FileResponse(WEB/name)
+def assets(name:Literal['dashboard.css','dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-forms.js','dashboard-preview.js','dashboard-reports.js','dashboard-presentation.js','dashboard-charts.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','collection-agent.svg','favicon.svg']): return FileResponse(WEB/name)
 
 
 @router.get('/favicon.ico',include_in_schema=False)

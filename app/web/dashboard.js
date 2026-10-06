@@ -1,6 +1,8 @@
 import {
   $,
   dataContext,
+  setViewNotes,
+  renderViewNotes,
   collectionMark,
   platformMark,
   state,
@@ -13,7 +15,9 @@ import {
   fmt,
   metric,
   date,
+  utc,
   period,
+  briefPeriod,
   status,
   provenance,
   message,
@@ -29,15 +33,17 @@ import {
   activeContent,
   submit,
 } from "./dashboard-core.js";
-import { accountTimeline, accountChangesTable, publicationBars } from "./dashboard-charts.js";
-import { sortObservations, updateTimes, accountOverview, accountPeriodInsights } from "./dashboard-presentation.js";
+import { accountTimeline, accountDailyTable, publicationBars } from "./dashboard-charts.js";
+import { sortObservations, publicationSelection, updateTimes, accountOverview, accountPeriodInsights, accountMetrics, comparisonFormat, comparisonSelection } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
+import { setupReports } from "./dashboard-reports.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
 import { openDetail } from "./dashboard-detail.js";
 import {
   setupForms,
   prepareObservation,
   renderExperiments,
+  renderManualMeasurements,
 } from "./dashboard-forms.js";
 const headings = {
   overview: "Обзор аккаунтов",
@@ -49,6 +55,7 @@ const headings = {
 };
 export function view(name) {
   state.view = name;
+  renderViewNotes();
   document
     .querySelectorAll(".view")
     .forEach((el) => (el.hidden = el.id !== "view-" + name));
@@ -60,8 +67,8 @@ export function view(name) {
       else b.removeAttribute("aria-current");
     });
   $("page-title").textContent = headings[name];
-  $("filter-disclosure").hidden = ["overview", "detail", "import", "experiments"].includes(name);
-  $("active-filters").hidden = name !== "content" && name !== "comparison";
+  $("filter-disclosure").hidden = ["overview", "detail", "import", "experiments", "comparison"].includes(name);
+  $("active-filters").hidden = name !== "content";
   if (state.comparison) renderUpdateInfo();
   $("main-content").focus();
 }
@@ -90,23 +97,23 @@ async function overview() {
   const histories = await Promise.all(
     selected.map(async (a) => [a, await all(`/accounts/${a.id}/history`)]),
   );
+  state.manualAccountRows = histories.flatMap(([account, rows]) => rows.filter(s => ["instagram_ui", "tiktok_studio", "manual"].includes(s.source)).map(snapshot => ({account, snapshot})));
   const cards = [], changes = [];
   state.accountMeasurements = [];
   for (const [a, history] of histories) {
     const {primary:s}=accountOverview(history,a.platform);
     for (const snapshot of [s,...accountPeriodInsights(history,a.platform+'_api')].filter(Boolean)) state.accountMeasurements.push({platform:a.platform,at:snapshot.snapshot_at});
-    const accountCard = s ? card(platformContext(a.platform, `@${a.username}`), s, [
-        ["Подписчики", fmt(s.followers)],
-        ["Просмотры", fmt(s.views)],
-        ["Уникальные зрители", fmt(s.unique_viewers)],
-        ["Просмотры профиля", fmt(s.profile_views)],
-        ["Новые зрители", fmt(s.new_viewers)],
-      ], true) : node('article',null,'observation-card');
+    const accountCard = s ? card(platformContext(a.platform, `@${a.username}`), s,
+      accountMetrics.filter(key=>key==='followers'||s[key]!=null).map(key=>[labels[key],fmt(s[key])]),
+      true) : node('article',null,'observation-card');
     if(s) {
+      const header=node('div',null,'account-summary');
+      header.append(accountCard.querySelector('.card-heading'),accountCard.querySelector('.metric-strip'));
+      accountCard.prepend(header);
       accountCard.append(accountTimeline(history,s));
     }
     else accountCard.append(platformContext(a.platform,`@${a.username}`),empty('Нет текущих показателей аккаунта'));
-    const accountChanges=accountChangesTable(history,s,platformContext(a.platform,`@${a.username}`),a.platform+'_api');
+    const accountChanges=accountDailyTable(history,s,a.platform+'_api',platformContext(a.platform,`@${a.username}`));
     if(accountChanges) changes.push(accountChanges);
     cards.push(accountCard);
   }
@@ -121,6 +128,10 @@ async function overview() {
           ),
         ]),
   );
+  setViewNotes("overview", histories.flatMap(([a,history])=>{
+    const primary=accountOverview(history,a.platform).primary;
+    return [primary,...accountPeriodInsights(history,a.platform+'_api')].filter(Boolean).map(snapshot=>({name:(a.platform==="tiktok"?"TikTok":"Instagram")+" @"+a.username,snapshot}));
+  }), ["На недельном графике — последний сохранённый замер каждой недели. Прочерк означает отсутствие данных; 0 — измеренное нулевое значение."]);
   put("account-changes",...changes);
   $("account-changes-section").hidden = !changes.length;
   const [health, runs] = await Promise.all([
@@ -251,7 +262,9 @@ function entries() {
     const seen = new Set(rows.map(r => r.content.id));
     for (const c of state.selection || []) if (!seen.has(c.id)) rows.push({content:c,snapshot:null,derived:{}});
   }
-  return sortObservations(rows, $("content-sort").value);
+  const source = state.appliedFilters?.find(([k]) => k === "source")?.[1] || "";
+  const key = $("content-display").value === "chart" ? $("content-chart-metric").value : "views";
+  return sortObservations(publicationSelection(rows, {source, key}), $("content-sort").value);
 }
 function platformContext(platform, text) {
   const context = node("span", null, "platform-context");
@@ -268,12 +281,13 @@ function publicationCard(r, availableOnly = false) {
   const keys = ["views", "likes", "shares"].filter(k => !availableOnly || s[k] != null);
   const values = node("div", null, "metric-strip");
   for (const k of keys) { const m = node("div"); m.append(node("strong", fmt(s[k]), "metric-value"), node("span", labels[k], "metric-label")); values.append(m); }
-  box.append(values, dataContext(s, state.comparison.rows.filter(row=>row.content.id===c.id).length > 1));
+  box.append(values, dataContext(s, true));
   if (!keys.length) box.append(node("p", "Показатели в этом наблюдении недоступны", "muted"));
   return box;
 }
 function renderContent() {
   const rows = entries();
+  setViewNotes("content", rows.filter(r=>r.snapshot).map(r=>({name:title(r.content),snapshot:r.snapshot})), ["Прочерк означает отсутствие данных; 0 — измеренное нулевое значение."]);
   $("sort-help").hidden = $("content-sort").value !== "views";
   const chart = $("content-display").value === "chart";
   $("chart-metric-control").hidden = !chart;
@@ -286,6 +300,19 @@ function renderContent() {
   $("active-filters").replaceChildren(...(constraints.length ? [node("span", constraints.map(([k,v])=>`${({platform:"Платформа",source:"Источник",date_from:"С",date_to:"По",series:"Серия",topic:"Тема",hook_type:"Хук"})[k]||k}: ${sources[v]||v}`).join(" · ")),button("Сбросить",resetFilters)] : []));
   put("content-cards", ...(rows.length ? rows.map(r => publicationCard(r)) : [selectionEmpty()]));
   function contentTable(keys, compact = false) {
+    if (compact && rows.length) {
+      const grid=table(["Фото", "Публикация", "Источник", ...keys.map(k=>labels[k])], rows.map(r=>{
+        const cell=node("div",null,"title-cell"), context=node("div",null,"publication-source"), s=r.snapshot;
+        cell.append(contentLink(r.content),platformContext(r.content.platform,date(r.content.published_at)));
+        if(s) {
+          context.append(node("span",sources[s.source] || s.source));
+          if(s.metric_scope!=="lifetime") context.append(node("span",briefPeriod(s),"cell-note"));
+          context.append(dataContext(s));
+        } else context.append(node("span","Нет наблюдений","muted"));
+        return [preview(r.content),cell,context,...keys.map(k=>metric(r.derived?.[k] ?? s?.[k],k))];
+      }));
+      return grid;
+    }
     return rows.length ? table(["Фото", compact ? "Публикация" : "Публикация / источник", ...keys.map(k => labels[k])], rows.map(r => {
       const cell = node("div", null, "title-cell"), s = r.snapshot;
       cell.append(contentLink(r.content), platformContext(r.content.platform, date(r.content.published_at)));
@@ -299,7 +326,7 @@ function renderContent() {
   }
   put("content-table", contentTable(["views", "likes", "shares"], true));
   put("content-full-table", contentTable(contentKeys));
-  $("content-count").textContent = `${new Set(rows.map(r=>r.content.id)).size} публикаций · ${state.comparison.rows.length} последних наблюдений${state.comparison.truncated ? " · выборка ограничена 1000; сузьте фильтры" : ""}`;
+  $("content-count").textContent = `${rows.length} публикаций${state.comparison.truncated ? " · выборка ограничена 1000; сузьте фильтры" : ""}`;
 
 }
 function renderUpdateInfo() {
@@ -317,60 +344,93 @@ function renderUpdateInfo() {
   put("last-update", node("p", times.latest ? `Последнее обновление данных: ${date(times.latest)}` : "Время обновления пока неизвестно", "muted"), ...warnings, ...(platforms.length ? [info] : []));
 }
 function renderComparison() {
-  if (!state.comparison?.groups?.length) {
-    const e = state.appliedFilters?.length ? selectionEmpty() : empty("Для сравнения пока нет наблюдений", "Сравнение появится после сохранения показателей публикаций и их разметки.");
-    put("comparison-table", e);
-    put("comparison-cards", state.appliedFilters?.length ? selectionEmpty() : empty("Для сравнения пока нет наблюдений","Сохраните показатели публикаций и заполните разметку."));
-    return;
-  }
-  const key = $("comparison-metric").value;
-  const guards = {
-    insufficient_sample: "Недостаточно данных",
-    directional_only: "Только направление",
-    observational_signal: "Наблюдаемая связь",
+  const data=state.allComparisonData;
+  if(!data) return;
+  const rows=data.rows, platforms=[...new Set(rows.map(r=>r.content.platform))];
+  if(!platforms.includes(state.comparisonPlatform)) state.comparisonPlatform=platforms.includes("tiktok") ? "tiktok" : platforms[0];
+  const platform=state.comparisonPlatform;
+  put("comparison-platforms",...platforms.map(p=>{
+    const b=button("",()=>{state.comparisonPlatform=p;renderComparison();},"comparison-platform");
+    const mark=platformMark(p);mark.tabIndex=-1;b.append(mark);
+    b.setAttribute("aria-label",{instagram:"Instagram",tiktok:"TikTok"}[p] || p);
+    b.setAttribute("aria-pressed",String(p===platform));
+    return b;
+  }));
+  const selectOptions=(id,values, preferred)=>{
+    const control=$(id), before=control.value;
+    control.replaceChildren(...values.map(value=>{const option=node("option",sources[value] || value);option.value=value;return option;}));
+    control.value=values.includes(before) ? before : preferred || values[0] || "";
+    control.disabled=!values.length;
   };
-  const groupCards = state.comparison.groups.map(g => {
-    const m = g.metrics[key], card = node("article",null,"comparison-group-card");
-    card.append(g.group ? node("h3",g.group) : button("Без тега — разметить публикации",()=>{view("content");message("global-message","Откройте историю публикации и раздел «Разметка публикации».");}),platformMark(g.platform));
-    card.append(node("p",labels[key],"muted"),node("strong",metric(m.mean,key),"metric-value"),node("p",`Среднее · медиана ${metric(m.median,key)}`,"muted"),node("p",`Доступно ${m.n} из ${g.sample_size} наблюдений`),node("p",g.comparable_period ? guards[m.guardrail] : "Неизвестный период — без агрегирования","data-warning"),dataContext(g,true));
-    return card;
-  });
-  put("comparison-cards",...groupCards);
-  put(
-    "comparison-table",
-    table(
-      [
-        "Группа",
-        "Платформа / источник",
-        "Период / статус",
-        "Публикаций",
-        "Доступных значений",
-        "Среднее",
-        "Медиана",
-        "Уверенность",
-      ],
-      (state.comparison?.groups || []).map((g) => {
-        const m = g.metrics[key];
-        return [
-          g.group || button("Без тега — разметить публикации", () => {
-            view("content");
-            message("global-message", "Откройте историю публикации и заполните разметку в разделе «Разметка публикации».");
-          }),
-          g.platform + " / " + sources[g.source],
-          period(g) +
-            " / " +
-            (statuses[g.snapshot_status] || g.snapshot_status),
-          g.sample_size,
-          m.n,
-          metric(m.mean, key),
-          metric(m.median, key),
-          g.comparable_period
-            ? guards[m.guardrail]
-            : "Неизвестный период — без агрегирования",
-        ];
-      }),
-    ),
-  );
+  const platformRows=rows.filter(r=>r.content.platform===platform), availableSources=[...new Set(platformRows.map(r=>r.snapshot.source))];
+  const usableCount=source=>comparisonSelection(platformRows,{platform,source,format:$("comparison-format").value || "Короткое видео",key:$("comparison-metric").value}).available;
+  const latest=source=>Math.max(0,...platformRows.filter(r=>r.snapshot.source===source).map(r=>Date.parse(r.snapshot.snapshot_at)||0));
+  availableSources.sort((a,b)=>usableCount(b)-usableCount(a) || latest(b)-latest(a));
+  selectOptions("comparison-source",availableSources);
+  const source=$("comparison-source").value;
+  const formats=[...new Set(platformRows.filter(r=>r.snapshot.source===source).map(r=>comparisonFormat(r.content)))];
+  selectOptions("comparison-format",formats,formats.includes("Короткое видео") ? "Короткое видео" : formats[0]);
+  const format=$("comparison-format").value, key=$("comparison-metric").value, groupBy=$("comparison-group").value;
+  let from=null,to=null;
+  try {
+    if($("comparison-from").value) from=Date.parse(utc($("comparison-from").value+"T00:00"));
+    if($("comparison-to").value) to=Date.parse(utc($("comparison-to").value+"T23:59"))+59999;
+  } catch(e) {put("comparison-cards",empty("Проверьте даты",e.message));return;}
+  setViewNotes("comparison");
+  put("comparison-context");put("comparison-insight");put("comparison-exclusions");
+  if(from!=null && to!=null && from>to) {put("comparison-cards",empty("Начало периода позже окончания", "Измените даты публикаций."));return;}
+  const result=comparisonSelection(rows,{platform,source,format,key,groupBy,from,to});
+  const measured=result.groups.flatMap(g=>g.rows);
+  const measuredTimes=measured.map(r=>Date.parse(r.snapshot.snapshot_at)).filter(Number.isFinite);
+  const dates=[...new Set(measuredTimes.length ? [date(Math.min(...measuredTimes)).split(",")[0],date(Math.max(...measuredTimes)).split(",")[0]] : [])];
+  const publicationDates=[$("comparison-from").value,$("comparison-to").value];
+  document.querySelector(".comparison-dates > summary").textContent=publicationDates.some(Boolean) ? "Публикации: "+(publicationDates[0] || "начало истории")+" — "+(publicationDates[1] || "без верхней границы") : "Период публикаций: все даты";
+  $("comparison-context").textContent=`С момента публикации · публикаций: ${measured.length}${dates.length ? " · измерения "+dates.join(" — ") : ""}${result.quality==="estimated" ? " · оценочные значения" : ""}`;
+  const skipped=[result.anomalies ? `${result.anomalies} с аномалией` : "",result.periods ? `${result.periods} с другим или неизвестным периодом` : "",result.otherQuality ? `${result.otherQuality} с другим состоянием данных` : ""].filter(Boolean);
+  $("comparison-exclusions").textContent=skipped.length ? "Не включены измерения: "+skipped.join("; ") : "";
+  if(!result.groups.length) {put("comparison-cards",empty("Нет сопоставимых публикаций", "Выберите другой источник, формат или период."));return;}
+  const valued=result.groups.filter(g=>g.n), name=g=>groupBy==="publication" ? title(g.rows[0].content) : g.group || "Без тега";
+  if(!valued.length) {put("comparison-cards",empty("По этому показателю нет данных", "Выберите другой показатель или источник."));return;}
+  const best=valued[0], tied=valued.filter(g=>g.mean===best.mean);
+  const insight=node("section",null,"comparison-insight");
+  if(data.truncated) insight.append(node("p","Выборка ограничена 1000 измерениями. Результат по всей истории не определён.","data-warning"));
+  else if(valued.length===1) insight.append(node("p","Есть данные только для одной "+(groupBy==="publication" ? "публикации" : "группы")+" — сравнить пока не с чем."));
+  else if(tied.length===valued.length) insight.append(node("p",`Значения одинаковые: ${metric(best.mean,key)}. Различий по этому показателю пока нет.`));
+  else {
+    const lead={views:"Больше просмотров",average_watch_pct:"Выше среднее время просмотра",completion_rate:"Выше досмотр",share_rate:"Выше доля репостов",save_rate:"Выше доля сохранений",profile_visit_rate:"Выше доля переходов в профиль",follow_conversion:"Выше конверсия в подписку"}[key];
+    insight.append(node("p",`${lead}${groupBy!=="publication" ? " в среднем" : ""}: «${name(best)}» — ${metric(best.mean,key)}${["completion_rate","average_watch_pct"].includes(key) ? "%" : ""}${tied.length>1 ? "; есть равные результаты" : ""}.`));
+  }
+  if(key==="views" && groupBy==="publication" && !data.truncated) {
+    const retention=comparisonSelection(rows,{platform,source,format,key:"completion_rate",groupBy,from,to}).groups.filter(g=>g.n);
+    if(retention.length>1 && retention[0].mean>retention.at(-1).mean) {
+      const top=retention[0], leader=retention.find(g=>g.group===best.group);
+      const equal=retention.filter(g=>g.mean===top.mean).length;
+      insight.append(node("p",`Досмотр выше у «${name(top)}» — ${metric(top.mean,"completion_rate")}%${equal>1 ? " (есть равные результаты)" : ""}.${leader && top.group!==best.group ? " У лидера по просмотрам — "+metric(leader.mean,"completion_rate")+"%." : ""}`));
+    }
+  }
+  const small=groupBy!=="publication" && valued.some(g=>g.n<5);
+  setViewNotes("comparison", measured.map(r=>({name:title(r.content),snapshot:r.snapshot})), [small ? "В группах меньше 5 публикаций. Эффективность типа хука или темы ещё не подтверждена." : "Публикации разного возраста. Накопленные результаты не показывают, что именно вызвало разницу."]);
+
+  put("comparison-insight",insight);
+  const list=node("ol",null,"comparison-ranking"), maximum=Math.max(...valued.map(g=>g.mean));
+  list.setAttribute("aria-label",groupBy==="publication" ? "Результаты публикаций" : "Средние результаты групп");
+  for(const g of result.groups) {
+    const row=node("li",null,"comparison-row"), head=node("div",null,"comparison-row-heading");
+    const label=groupBy==="publication" ? button(name(g),async()=>{await openDetail(g.rows[0].content.id,source);view("detail");$("detail-title").focus();},"comparison-name") : node("strong",name(g));
+    head.append(label,node("strong",metric(g.mean,key),"comparison-value"));row.append(head);
+    if(groupBy!=="publication") row.append(node("p",`Среднее · ${g.n} из ${g.rows.length} публикаций с данными`,"muted"));
+    const track=node("div",null,"comparison-bar-track"), bar=node("div",null,"comparison-bar");
+    track.setAttribute("aria-hidden","true");bar.style.width=(g.mean!=null && maximum>0 ? 100*g.mean/maximum : 0)+"%";track.append(bar);row.append(track);
+    if(groupBy!=="publication") {
+      const details=node("details"), members=node("ul",null,"comparison-members");
+      details.append(node("summary",`Публикации (${g.rows.length})`));
+      for(const r of g.rows) {const member=node("li");member.append(button(title(r.content),async()=>{await openDetail(r.content.id,source);view("detail");$("detail-title").focus();},"comparison-name"),node("span",metric(r.derived?.[key] ?? r.snapshot[key],key)));if(r.content.hook_text) member.append(node("p",r.content.hook_text,"muted"));members.append(member);}
+      details.append(members);row.append(details);
+      if(!g.group) row.append(button("Разметить публикации",()=>view("content")));
+    }
+    list.append(row);
+  }
+  put("comparison-cards",list);
 }
 async function refresh() {
   const b = $("refresh");
@@ -384,12 +444,15 @@ async function refresh() {
       all("/content"),
       all("/experiments"),
     ]);
-    await Promise.all([overview(), contentAndComparison()]);
+    const [, , manualData] = await Promise.all([overview(), contentAndComparison(), api("/analytics/content-comparison?limit=1000")]);
+    state.allComparisonData=manualData;
+    renderComparison();
+    renderManualMeasurements(manualData, state.manualAccountRows, async (c, source) => { await openDetail(c.id, source); view("detail"); $("detail-title").focus(); });
     renderUpdateInfo();
     renderExperiments();
     prepareObservation();
     if (state.view === "detail" && state.detail)
-      await openDetail(state.detail.id);
+      await openDetail(state.detail.id, state.detailSource);
     message(
       "global-message",
       state.comparison.truncated
@@ -434,14 +497,9 @@ $("content-sort").addEventListener("change", renderContent);
 $("content-display").addEventListener("change", renderContent);
 $("content-chart-metric").addEventListener("change", renderContent);
 const mobileFilters = window.matchMedia("(max-width: 700px)");
-$("filter-disclosure").open = !mobileFilters.matches;
-mobileFilters.addEventListener("change", e => { $("filter-disclosure").open = !e.matches; });
-$("comparison-group").addEventListener("change", () =>
-  contentAndComparison().catch((e) =>
-    message("global-message", e.message, true),
-  ),
-);
-$("comparison-metric").addEventListener("change", renderComparison);
+$("filter-disclosure").open = false;
+mobileFilters.addEventListener("change", e => { if(e.matches) $("filter-disclosure").open = false; });
+for(const id of ["comparison-group","comparison-metric","comparison-source","comparison-format","comparison-from","comparison-to"]) $(id).addEventListener("change",renderComparison);
 const params = new URLSearchParams(location.search);
 Object.keys(filterMap)
   .concat(["from", "to"])
@@ -484,6 +542,7 @@ $("logout").addEventListener("click", async () => {
   }
 });
 setupPreview();
+setupReports();
 setupForms(refresh);
 view("overview");
 (async () => {

@@ -56,11 +56,11 @@
           <p class="nav-hint">Разделы → прокрутите вправо</p>
           <nav aria-label="Разделы аналитики">
             <button data-view="overview" class="active" aria-current="page">
-              01 <span>Обзор</span></button
-            ><button data-view="content">02 <span>Публикации</span></button
-            ><button data-view="comparison">03 <span>Сравнение</span></button
-            ><button data-view="import">04 <span>Наблюдения</span></button
-            ><button data-view="experiments">05 <span>Гипотезы</span></button>
+              <svg class="nav-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="7" rx="1.5"/><rect x="12" y="3" width="6" height="4" rx="1.5"/><rect x="3" y="13" width="6" height="5" rx="1.5"/><rect x="12" y="10" width="6" height="8" rx="1.5"/></svg> <span>Обзор</span></button
+            ><button data-view="content"><svg class="nav-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="15" height="15" rx="3"/><path d="m8.5 7 5 3.5-5 3.5z"/></svg> <span>Публикации</span></button
+            ><button data-view="comparison"><svg class="nav-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17h13M5 13V9m5 4V4m5 9V7"/></svg> <span>Сравнение</span></button
+            ><button data-view="import"><svg class="nav-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h8l4 4v9H4zM12 4v4h4M7 11h6m-6 3h4"/></svg> <span>Наблюдения</span></button
+            ><button data-view="experiments"><svg class="nav-icon" viewBox="0 0 21 21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13a6 6 0 1 1 7 0l-1 2H8zM8 18h5M9 15v3m3-3v3"/></svg> <span>Гипотезы</span></button>
           </nav>
         </aside>
         <main id="main-content" tabindex="-1">
@@ -68,10 +68,33 @@
             <div>
               <h1 id="page-title">Аналитика аккаунтов</h1>
             </div>
-            <button id="refresh" class="outlined">Обновить данные ↻</button>
+            <div class="page-actions">
+              <details id="report-menu" class="report-menu">
+                <summary class="outlined">Отправить отчёт <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v9m-3-3 3 3 3-3M4 12v4h12v-4"/></svg></summary>
+                <div class="report-panel">
+                  <label for="report-period">Период отчёта</label>
+                  <select id="report-period"><option value="7">Последние 7 дней</option><option value="30">Последние 30 дней</option></select>
+                  <p id="report-preview" class="muted" aria-live="polite"></p>
+                  <div class="report-downloads">
+                    <button type="button" class="primary" data-report-format="pdf">Скачать PDF</button>
+                    <button type="button" class="outlined" data-report-format="xlsx">Скачать Excel</button>
+                  </div>
+                  <p class="report-format-hint muted">PDF — сводка и графики · Excel — таблицы</p>
+                  <div class="report-telegram-section">
+                    <label for="report-recipient">Адресат в Telegram</label>
+                    <input id="report-recipient" placeholder="@username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="33" aria-describedby="report-telegram-hint" />
+                    <a id="report-telegram" class="outlined" target="_blank" rel="noopener noreferrer" aria-disabled="true">Открыть в Telegram</a>
+                    <p id="report-telegram-hint" class="muted">Откроется чат со сводкой. Нажмите «Отправить» в Telegram. Файл можно прикрепить отдельно.</p>
+                    <button id="report-copy" type="button" class="quiet">Скопировать сводку</button>
+                  </div>
+                  <p id="report-error" role="status" aria-live="polite"></p>
+                </div>
+              </details>
+            <button id="refresh" class="outlined">Обновить данные <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/></svg></button>
+            </div>
           </div>
           <p id="global-message" role="status" aria-live="polite"></p>
-          <details id="filter-disclosure" class="filter-disclosure" open>
+          <details id="filter-disclosure" class="filter-disclosure">
             <summary id="filter-summary">Фильтры: все платформы · любые даты</summary>
           <form id="filters" class="filters">
             <label
@@ -87,7 +110,7 @@
               <summary>Дополнительные фильтры</summary>
               <div class="filter-extra">
                 <label>Источник<select id="filter-source">
-                  <option value="">Все источники</option>
+                  <option value="">Основной источник</option>
                   <option value="instagram_api">Instagram API</option><option value="instagram_ui">Instagram Insights</option>
                   <option value="tiktok_api">TikTok API</option><option value="tiktok_studio">TikTok Studio</option><option value="manual">Вручную</option>
                 </select></label>
@@ -103,7 +126,7 @@
           </form>
           </details><div id="active-filters" class="active-filters"></div>
           <div id="last-update" class="context-line"></div>
-          <p id="collection-note" class="collection-mark" data-collection-mode="automatic"><img src="/dashboard/assets/collection-automatic.svg" alt="" width="16" height="16" />Автоматический сбор из аккаунтов</p>
+          <p id="collection-note" class="collection-mark" data-collection-mode="automatic"><img src="/dashboard/assets/collection-automatic.svg" alt="" width="16" height="16" />Автоматическое обновление по API</p>
           <section
             id="view-overview"
             class="view"
@@ -111,11 +134,12 @@
           >
             <div class="section-heading">
               <h2 id="overview-title">Состояние аккаунтов</h2>
-              <button type="button" class="quiet" data-view="content">Разобрать публикации →</button>
+              <button type="button" class="quiet" data-view="content">К публикациям →</button>
             </div>
             <div id="account-cards" class="account-grid"></div>
             <section id="account-changes-section" hidden aria-labelledby="account-changes-title">
-              <div class="section-heading"><h2 id="account-changes-title">Изменения по датам</h2></div>
+              <div class="section-heading"><h2 id="account-changes-title">Динамика показателей по дням</h2></div>
+              <p class="muted">Сутки · UTC</p>
               <div id="account-changes"></div>
             </section>
             <details class="edit-box collector-management"><summary>Управление сбором и история запусков</summary>
@@ -156,16 +180,15 @@
               <h2 id="content-title">Результаты публикаций</h2>
               <span id="content-count" class="muted"></span>
             </div>
+            <div class="content-controls">
             <label class="sort-control">Порядок<select id="content-sort"><option value="date">Сначала новые публикации</option><option value="views">Просмотры: по убыванию</option></select></label>
             <details id="sort-help" hidden><summary>Как сравниваются просмотры</summary><p class="muted">Сортировка внутри групп по источнику, периоду и статусу.</p></details>
             <div class="display-controls"><label>Вид<select id="content-display"><option value="list">Список</option><option value="chart">График</option></select></label><label id="chart-metric-control" hidden>Показатель графика<select id="content-chart-metric"><option value="views">Просмотры</option><option value="likes">Лайки</option><option value="shares">Репосты</option><option value="completion_rate">Досмотр, %</option><option value="average_watch_pct">Среднее время, % длины</option><option value="watch_time_avg_seconds">Среднее время, сек.</option></select></label></div>
+            </div>
             <div id="publication-chart" hidden></div>
             <div id="content-cards" class="publication-cards"></div>
             <div id="content-table" class="table-wrap compact-content"></div>
             <details class="history-box"><summary>Полная таблица показателей</summary><div id="content-full-table" class="table-wrap"></div></details>
-            <p class="muted">
-              — нет данных · 0 — нулевое значение
-            </p>
           </section>
           <section
             id="view-comparison"
@@ -173,39 +196,41 @@
             hidden
             aria-labelledby="comparison-title"
           >
-            <div class="section-heading">
-              <h2 id="comparison-title">Сравнение групп</h2>
-            </div>
+            <h2 id="comparison-title" class="sr-only">Результаты публикаций</h2>
+            <div class="comparison-toolbar">
+            <div id="comparison-platforms" class="comparison-platforms" role="group" aria-label="Платформа для сравнения"></div>
             <div class="comparison-controls">
-              <label
-                >Сравнить по<select id="comparison-group">
-                  <option value="hook_type">Типу хука</option>
-                  <option value="series">Серии</option>
-                  <option value="topic">Теме</option>
-                  <option value="format">Формату</option>
-                  <option value="cta_type">CTA</option>
-                  <option value="content_pillar">Контент-пиллару</option>
-                  <option value="platform">Платформе</option>
-                </select></label
-              ><label
-                >Показатель<select id="comparison-metric">
-                  <option value="views">Просмотры</option>
-                  <option value="average_watch_pct">
-                    Среднее время просмотра, % длины
-                  </option>
-                  <option value="completion_rate">Досмотр, %</option>
-                  <option value="share_rate">Доля репостов</option>
-                  <option value="save_rate">Доля сохранений</option>
-                  <option value="profile_visit_rate">Переходы в профиль</option>
-                  <option value="follow_conversion">
-                    Конверсия в подписку
-                  </option>
-                </select></label
-              >
+              <label>Данные<select id="comparison-source"></select></label>
+              <label>Формат<select id="comparison-format"></select></label>
+              <label>Что сравнить<select id="comparison-group">
+                <option value="publication">Публикации</option>
+                <option value="hook_type">Типы хуков</option>
+                <option value="topic">Темы</option>
+                <option value="series">Серии</option>
+                <option value="cta_type">Призывы к действию</option>
+                <option value="content_pillar">Направления контента</option>
+              </select></label>
+              <label>Показатель<select id="comparison-metric">
+                <option value="views">Просмотры</option>
+                <option value="average_watch_pct">Среднее время просмотра, % длины</option>
+                <option value="completion_rate">Досмотр, %</option>
+                <option value="share_rate">Доля репостов</option>
+                <option value="save_rate">Доля сохранений</option>
+                <option value="profile_visit_rate">Переходы в профиль</option>
+                <option value="follow_conversion">Конверсия в подписку</option>
+              </select></label>
             </div>
-            <div id="comparison-cards" class="comparison-cards"></div>
-            <details class="history-box"><summary>Таблица сравнения групп</summary><div id="comparison-table" class="table-wrap"></div></details>
-            <details class="comparison-help"><summary>О сравнении</summary><p class="muted">До 5 наблюдений — данных недостаточно; 5–9 — предварительный результат. Сравнение не доказывает причинную связь.</p></details>
+            </div>
+            <details class="comparison-dates"><summary>Период публикаций</summary>
+              <div class="form-grid">
+                <label>Опубликованы с<input id="comparison-from" type="date"></label>
+                <label>По<input id="comparison-to" type="date"></label>
+              </div>
+            </details>
+            <p id="comparison-context" class="muted"></p>
+            <div id="comparison-insight" aria-live="polite"></div>
+            <p id="comparison-exclusions" class="data-warning"></p>
+            <div id="comparison-cards" class="comparison-results"></div>
           </section>
           <section
             id="view-detail"
@@ -241,13 +266,13 @@
             </div>
             <div id="growth-chart" class="chart-box"></div>
             <div id="velocity-table" class="table-wrap"></div>
-            <div class="section-heading"><h3>Удержание из интерфейса</h3><span data-entry-mode="manual"></span></div>
+            <div class="section-heading"><h3>Удержание из интерфейса</h3><span data-entry-mode="assisted"></span></div>
             <div id="retention-table" class="table-wrap"></div>
             <div class="section-heading"><h3>История и география</h3></div>
             <div id="detail-history" class="table-wrap"></div>
             <p id="history-limit" class="muted"></p>
             <details class="edit-box">
-              <summary>Разметка публикации <span data-entry-mode="manual"></span></summary>
+              <summary>Разметка публикации <span data-entry-mode="assisted"></span></summary>
               <form id="tags-form">
                 <div id="tag-fields" class="form-grid"></div>
                 <button type="submit" class="primary">Сохранить теги</button>
@@ -255,7 +280,7 @@
               </form>
             </details>
             <details class="edit-box">
-              <summary>Гипотезы и варианты <span data-entry-mode="manual"></span></summary>
+              <summary>Гипотезы и варианты <span data-entry-mode="assisted"></span></summary>
               <div id="detail-experiments"></div>
               <form id="link-experiment-form" class="form-grid">
                 <label>Гипотеза<select id="link-experiment"></select></label
@@ -274,10 +299,13 @@
             aria-labelledby="import-title"
           >
             <div class="section-heading">
-              <h2 id="import-title">Добавить наблюдение</h2>
-              <span data-entry-mode="manual"></span>
+              <h2 id="import-title">Сохранённые наблюдения</h2>
+              <span id="observation-collection-mode"></span>
             </div>
-            <form id="observation-form" class="edit-box">
+            <div id="manual-measurements" aria-live="polite"></div>
+            <details class="edit-box observation-editor">
+              <summary>Добавить наблюдение самостоятельно</summary>
+            <form id="observation-form">
               <div class="form-grid">
                 <label
                   >Объект<select id="observation-kind">
@@ -373,6 +401,7 @@
               <button type="submit" class="primary">Добавить в историю</button>
               <p id="observation-message" role="status"></p>
             </form>
+            </details>
             <details class="edit-box">
               <summary>Импорт JSON-отчёта</summary>
               <form id="json-import-form">
@@ -410,7 +439,7 @@
             </div>
             <div id="experiment-list"></div>
             <details class="edit-box">
-              <summary>Новая гипотеза <span data-entry-mode="manual"></span></summary>
+              <summary>Новая гипотеза <span data-entry-mode="assisted"></span></summary>
               <form id="experiment-form" class="form-grid">
                 <label>Название<input id="experiment-name" required /></label
                 ><label
@@ -431,6 +460,10 @@
               </form>
             </details>
           </section>
+          <details id="view-notes" class="view-notes" hidden>
+            <summary>Примечания</summary>
+            <div id="view-notes-body"></div>
+          </details>
         </main>
       </div>
     </div>
@@ -441,7 +474,7 @@
           <button id="photo-close" type="button" class="outlined" autofocus aria-label="Закрыть фото">Закрыть ×</button>
         </div>
         <img referrerpolicy="no-referrer" decoding="async" alt="" />
-        <p id="photo-error" role="status" hidden>Фото недоступно. Ссылка могла истечь; она обновится при следующем сборе.</p>
+        <div id="photo-error" hidden><p role="status">Фото не загрузилось</p><button type="button" class="outlined">Загрузить фото</button></div>
         <a id="photo-permalink" target="_blank" rel="noopener noreferrer" hidden>Открыть публикацию ↗</a>
       </div>
     </dialog>

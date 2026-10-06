@@ -38,7 +38,7 @@ def test_session_errors_do_not_echo_key(client):
 def test_dashboard_assets_allowlist_and_script_modules(client):
     page=client.get('/dashboard')
     assert 'type="module"' in page.text
-    for name in ('dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-forms.js','dashboard-preview.js','dashboard-presentation.js','dashboard-charts.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','dashboard.css','favicon.svg'):
+    for name in ('dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-forms.js','dashboard-preview.js','dashboard-reports.js','dashboard-presentation.js','dashboard-charts.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','collection-agent.svg','dashboard.css','favicon.svg'):
         response=client.get('/dashboard/assets/'+name)
         assert response.status_code==200 and response.content
         assert response.headers['X-Content-Type-Options']=='nosniff'

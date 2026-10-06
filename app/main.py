@@ -29,6 +29,8 @@ from app.dashboard_api import router as dashboard_router
 app.include_router(dashboard_router)
 from app.content_preview import router as preview_router
 app.include_router(preview_router)
+from app.reports_api import router as reports_router
+app.include_router(reports_router)
 
 
 @app.middleware('http')
