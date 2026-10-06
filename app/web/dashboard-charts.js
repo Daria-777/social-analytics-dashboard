@@ -1,6 +1,6 @@
-import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state,table} from './dashboard-core.js';
+import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state,table,status} from './dashboard-core.js';
 import {preview} from './dashboard-preview.js';
-import {chartGroups,historyPoints,accountTrend,accountWeeks,accountDailyChanges,accountMetrics} from './dashboard-presentation.js';
+import {chartGroups,historyPoints,accountTrend,accountWeeks,accountDailyChanges,accountMetrics,accountPeriodInsights,accountPeriodMetrics} from './dashboard-presentation.js';
 const ns='http://www.w3.org/2000/svg';
 const colors=['#067462','#a34f21','#365e83','#715b7f','#646a24'];
 const shapes=['circle','square','triangle','diamond'];
@@ -86,10 +86,10 @@ export function accountTimeline(history, latest) {
     root.append(node('p','Недельная история доступна для текущих показателей аккаунта','muted'));
     return root;
   }
-  const keys=['followers','following','views','unique_viewers','profile_views','new_viewers'];
+  const keys=accountMetrics;
   const select=node('select'),label=node('label',null,'account-metric-select');
   label.append(node('span','Показатель'),select);
-  const displayLabels={...labels,following:'Аккаунт подписан на',profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
+  const displayLabels={...labels,profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
   for (const key of keys) {
     const option=node('option',displayLabels[key]); option.value=key;
     option.disabled=key!=='followers'&&!accountTrend(history,latest,key).points.length;
@@ -130,14 +130,15 @@ export function accountTimeline(history, latest) {
 }
 
 
-export function accountChangesTable(history,latest,accountTitle) {
+export function accountChangesTable(history,latest,accountTitle,source) {
+  const rows=latest?accountDailyChanges(history,latest,state.config.display_timezone):[];
+  const insights=accountPeriodInsights(history,source);
+  if(!rows.length&&!insights.length) return null;
   const root=node('section',null,'account-daily-changes');
   const heading=node('h3');heading.append(accountTitle);root.append(heading);
-  const rows=accountDailyChanges(history,latest,state.config.display_timezone);
-  if(!rows.length) {root.append(node('p','Нет данных для сравнения','muted'));return root;}
-  root.append(node('p','Между последними замерами дней','muted'));
+  if(rows.length) root.append(node('p','Между последними замерами дней','muted'));
   const dateOnly=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'UTC',dateStyle:'short'}).format(new Date(value+'T12:00:00Z'));
-  const displayLabels={...labels,following:'Подписки',profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
+  const displayLabels={...labels,profile_views:'Просмотры профиля',new_viewers:'Новые зрители'};
   const values=rows.map(row=>[
     row.start===row.end?dateOnly(row.end):dateOnly(row.start)+' → '+dateOnly(row.end),
     ...accountMetrics.map(key=>{
@@ -153,6 +154,20 @@ export function accountChangesTable(history,latest,accountTitle) {
   wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Таблица изменений показателей по датам');
   const grid=table(['Дата',...accountMetrics.map(key=>displayLabels[key])],values);
   grid.prepend(node('caption','Чистое изменение показателей между последними замерами дней','sr-only'));
-  wrap.append(grid);root.append(wrap);
+  wrap.append(grid);if(rows.length) root.append(wrap);
+  if(insights.length) {
+    root.append(node('h4','Просмотры и посещения'),node('p','За указанные периоды','muted'));
+    const periodDate=value=>new Intl.DateTimeFormat('ru-RU',{dateStyle:'short',timeZone:state.config.display_timezone}).format(new Date(value));
+    const periodWrap=node('div',null,'table-wrap account-insights-table');periodWrap.tabIndex=0;
+    periodWrap.setAttribute('role','region');periodWrap.setAttribute('aria-label','Просмотры и посещения за периоды');
+    const periodGrid=table(['Даты',...accountPeriodMetrics.map(key=>displayLabels[key]),'О данных'],insights.map(row=>{
+      const start=periodDate(row.source_period_start),end=periodDate(row.source_period_end);
+      const info=node('details',null,'data-details');
+      info.append(node('summary','О данных'),node('p',provenance(row),'card-provenance'),status(row.snapshot_status));
+      return [start===end?start:start+' → '+end,...accountPeriodMetrics.map(key=>fmt(row[key])),info];
+    }));
+    periodGrid.prepend(node('caption','Просмотры и посещения за указанные периоды, без пересчёта в прирост','sr-only'));
+    periodWrap.append(periodGrid);root.append(periodWrap);
+  }
   return root;
 }

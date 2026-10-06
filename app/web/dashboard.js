@@ -30,7 +30,7 @@ import {
   submit,
 } from "./dashboard-core.js";
 import { accountTimeline, accountChangesTable, publicationBars } from "./dashboard-charts.js";
-import { sortObservations, updateTimes, accountOverview } from "./dashboard-presentation.js";
+import { sortObservations, updateTimes, accountOverview, accountPeriodInsights } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
 import { openDetail } from "./dashboard-detail.js";
@@ -93,11 +93,10 @@ async function overview() {
   const cards = [], changes = [];
   state.accountMeasurements = [];
   for (const [a, history] of histories) {
-    const {primary:s,additional}=accountOverview(history,a.platform);
-    for (const snapshot of [s,...additional].filter(Boolean)) state.accountMeasurements.push({platform:a.platform,at:snapshot.snapshot_at});
+    const {primary:s}=accountOverview(history,a.platform);
+    for (const snapshot of [s,...accountPeriodInsights(history,a.platform+'_api')].filter(Boolean)) state.accountMeasurements.push({platform:a.platform,at:snapshot.snapshot_at});
     const accountCard = s ? card(platformContext(a.platform, `@${a.username}`), s, [
         ["Подписчики", fmt(s.followers)],
-        ["Аккаунт подписан на", fmt(s.following)],
         ["Просмотры", fmt(s.views)],
         ["Уникальные зрители", fmt(s.unique_viewers)],
         ["Просмотры профиля", fmt(s.profile_views)],
@@ -105,16 +104,10 @@ async function overview() {
       ], true) : node('article',null,'observation-card');
     if(s) {
       accountCard.append(accountTimeline(history,s));
-      changes.push(accountChangesTable(history,s,platformContext(a.platform,`@${a.username}`)));
     }
     else accountCard.append(platformContext(a.platform,`@${a.username}`),empty('Нет текущих показателей аккаунта'));
-    if(additional.length) {
-      const details=node('details',null,'account-periods'),wrap=node('div',null,'table-wrap');
-      details.append(node('summary',`Другие источники и периоды (${additional.length})`));
-      const records=table(['О данных','Подписчики','Аккаунт подписан на','Просмотры','Уникальные зрители','Просмотры профиля','Новые зрители'],additional.map(row=>[dataContext(row),fmt(row.followers),fmt(row.following),fmt(row.views),fmt(row.unique_viewers),fmt(row.profile_views),fmt(row.new_viewers)]));
-      records.prepend(node('caption','Показатели аккаунта из других источников и периодов','sr-only'));
-      wrap.append(records);details.append(wrap);accountCard.append(details);
-    }
+    const accountChanges=accountChangesTable(history,s,platformContext(a.platform,`@${a.username}`),a.platform+'_api');
+    if(accountChanges) changes.push(accountChanges);
     cards.push(accountCard);
   }
   put(

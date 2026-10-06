@@ -48,7 +48,6 @@ const contentMetrics = [
 ];
 const accountMetrics = [
   "followers",
-  "following",
   "views",
   "unique_viewers",
   "profile_views",

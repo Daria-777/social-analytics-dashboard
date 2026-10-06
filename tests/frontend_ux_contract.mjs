@@ -89,7 +89,7 @@ console.log('Compact overview: one API summary, other periods/sources preserved 
 const {accountDailyChanges}=await import('../app/web/dashboard-presentation.js');
 const daily=(history,tz='Europe/Moscow')=>accountDailyChanges(history,history.at(-1),tz);
 const day4=a('2026-10-04T16:00:00Z',10,{following:5}),day5=a('2026-10-05T16:00:00Z',13,{following:4}),day6=a('2026-10-06T16:00:00Z',12,{following:6});
-assert.deepEqual(daily([day4,day5,day6]).map(r=>[r.start,r.end,r.values.followers,r.values.following]),[['2026-10-06','2026-10-06',-1,2],['2026-10-05','2026-10-05',3,-1],['2026-10-04','2026-10-04',undefined,undefined]]);
+assert.deepEqual(daily([day4,day5,day6]).map(r=>[r.start,r.end,r.values.followers,r.values.following]),[['2026-10-06','2026-10-06',-1,undefined],['2026-10-05','2026-10-05',3,undefined],['2026-10-04','2026-10-04',undefined,undefined]]);
 assert.equal(daily([day4,a('2026-10-05T10:00:00Z',11),a('2026-10-05T17:00:00Z',14)])[0].values.followers,4);
 const gap=daily([day4,a('2026-10-07T16:00:00Z',13)])[0];
 assert.deepEqual([gap.start,gap.end,gap.values.followers],['2026-10-04','2026-10-07',3]);
@@ -106,3 +106,12 @@ assert.equal(daily([a('2026-10-04T22:30:00Z',10),a('2026-10-05T22:30:00Z',13)],'
 const spring=daily([a('2026-03-07T17:00:00Z',10),a('2026-03-08T16:00:00Z',13)],'America/New_York')[0];
 assert.equal(spring.start,spring.end);assert.equal(spring.values.followers,3);
 console.log('Daily changes: signed day-end differences, intraday deduplication, baselines, unknown/zero, gaps, conflicts, source separation and DST passed');
+
+const {accountPeriodInsights,accountMetrics}=await import('../app/web/dashboard-presentation.js');
+assert.equal(accountMetrics.includes('following'),false);
+const periodRow={...day6,metric_scope:'range',source_period_start:'2026-10-01T00:00:00Z',source_period_end:'2026-10-02T00:00:00Z',views:40};
+const revised={...periodRow,snapshot_at:'2026-10-07T16:00:00Z',views:42};
+assert.deepEqual(accountPeriodInsights([periodRow,revised,{...periodRow,source:'instagram_ui',views:999},day6,{...periodRow,source_period_end:null}], 'instagram_api'),[revised]);
+assert.equal(accountPeriodInsights([{...periodRow,views:0}], 'instagram_api')[0].views,0);
+assert.deepEqual(accountPeriodInsights([{...periodRow,views:null},{...periodRow,views:''}], 'instagram_api'),[]);
+console.log('Focused account metrics: following hidden; dated period totals retain source, period, zero and latest revision');

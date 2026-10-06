@@ -90,7 +90,7 @@ export function accountWeeks(points, timeZone, now = new Date(), key = "follower
   return weeks;
 }
 
-// One visible account summary; retain distinct sources and periods in disclosure.
+// Prefer an API current summary; keep distinct contexts separate.
 export function accountOverview(history, platform) {
   const latest=new Map();
   const context=s=>JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]);
@@ -101,7 +101,7 @@ export function accountOverview(history, platform) {
   return {primary,additional:rows.filter(s=>s!==primary)};
 }
 
-export const accountMetrics=['followers','following','views','unique_viewers','profile_views','new_viewers'];
+export const accountMetrics=['followers','views','unique_viewers','profile_views','new_viewers'];
 
 // Day-end observations, never gross follows/unfollows or interpolated daily events.
 export function accountDailyChanges(history, latest, timeZone) {
@@ -140,4 +140,18 @@ export function accountDailyChanges(history, latest, timeZone) {
     if(!changed) rows.set(day+'/'+day,{start:day,end:day,values:{},observations:{}});
   }
   return [...rows.values()].sort((a,b)=>b.end.localeCompare(a.end)||b.start.localeCompare(a.start));
+}
+
+// Actual period totals, never differences of cumulative counters or cross-source sums.
+export const accountPeriodMetrics=['views','unique_viewers','profile_views','new_viewers'];
+export function accountPeriodInsights(history, source) {
+  const latest=new Map();
+  for(const row of history) {
+    const start=Date.parse(row.source_period_start),end=Date.parse(row.source_period_end),at=Date.parse(row.snapshot_at);
+    if(row.source!==source||row.metric_scope!=='range'||![start,end,at].every(Number.isFinite)||end<=start) continue;
+    if(!accountPeriodMetrics.some(key=>row[key]!=null&&String(row[key]).trim()!==''&&Number.isFinite(Number(row[key]))&&Number(row[key])>=0)) continue;
+    const context=JSON.stringify([start,end,row.snapshot_status]);
+    if(!latest.has(context)||at>Date.parse(latest.get(context).snapshot_at)) latest.set(context,row);
+  }
+  return [...latest.values()].sort((a,b)=>Date.parse(b.source_period_end)-Date.parse(a.source_period_end)||Date.parse(b.snapshot_at)-Date.parse(a.snapshot_at));
 }
