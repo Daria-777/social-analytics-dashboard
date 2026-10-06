@@ -70,3 +70,18 @@ assert.equal(accountTrend(following,following.at(-1),'following').delta,-2);
 assert.equal(accountWeeks(accountTrend(following,following.at(-1),'following').points,'UTC',new Date('2026-10-06'),'following')[0].value,8);
 assert.deepEqual(accountWeeks([],'UTC'),[]);
 console.log('Weekly account history: last actual observation, gaps vs zero, timezone, DST, year boundary and metric selection passed');
+
+const {accountOverview}=await import('../app/web/dashboard-presentation.js');
+const manual=a('2026-10-06T12:00:00Z',999,{source:'instagram_ui'});
+const range=a('2026-10-06T13:00:00Z',null,{metric_scope:'range',source_period_start:'2026-10-01',source_period_end:'2026-10-02'});
+const main=a('2026-10-06T10:00:00Z',2);
+const compact=accountOverview([early,main,manual,range,{...range,snapshot_at:'2026-10-05T13:00:00Z'}],'instagram');
+assert.equal(compact.primary,main);
+assert.equal(compact.additional.length,2);
+assert.equal(compact.additional[0],range);
+assert.equal(accountOverview([manual],'instagram').primary,manual);
+assert.equal(accountOverview([range],'instagram').primary,null);
+assert.deepEqual(accountOverview([],'instagram'),{primary:null,additional:[]});
+assert.deepEqual(weekly(weeklyInput).at(-1).change,{delta:1,from:'2026-10-05T10:00:00Z',to:'2026-10-06T10:00:00Z'});
+assert.equal(weekly(weeklyInput)[0].change,null);
+console.log('Compact overview: one API summary, other periods/sources preserved separately, observed change intervals verified');

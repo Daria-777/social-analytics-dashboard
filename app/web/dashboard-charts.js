@@ -119,6 +119,13 @@ export function accountTimeline(history, latest) {
       column.append(svg,node('span',calendarDate(week.start)+' –','week-date'),node('span',calendarDate(week.end),'week-date'));
       if (week.current) column.append(node('span','Текущая неделя','week-note'));
       if (week.value==null) column.append(node('span','Нет данных','week-note'));
+      if (week.change?.delta) {
+        const {delta,from,to}=week.change;
+        const shortDate=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:state.config.display_timezone,day:'2-digit',month:'2-digit'}).format(new Date(value));
+        const change=node('span',`Изменение ${delta>0?'+':''}${fmt(delta,0)}`,'week-change');
+        change.title=`Разница между замерами ${date(from)} и ${date(to)}`;
+        column.append(change,node('span',shortDate(from)+' → '+shortDate(to),'week-note'));
+      }
       list.append(column);
     }
     scroll.append(list);chart.append(scroll);

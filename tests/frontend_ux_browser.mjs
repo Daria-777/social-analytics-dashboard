@@ -61,6 +61,20 @@ try {
  accountHistory.push({...accountHistory[0],snapshot_at:'2026-10-06T16:00:00Z',followers:2,following:4}, {...accountHistory[0],snapshot_at:'2026-09-14T16:00:00Z',followers:3}, {...accountHistory[0],snapshot_at:'2026-09-21T16:00:00Z',followers:0});
  await page.locator('#refresh').click();
  await page.locator('#account-cards .account-week').nth(3).getByText('2',{exact:true}).waitFor();
+ accountHistory.push(...[1,2,3,4].map(day=>({...accountHistory[0],metric_scope:'range',snapshot_status:'estimated',snapshot_at:'2026-10-06T17:00:00Z',source_period_start:`2026-10-0${day}T00:00:00Z`,source_period_end:`2026-10-0${day+1}T00:00:00Z`,followers:null,views:40})),{...accountHistory[0],source:'instagram_ui',snapshot_at:'2026-10-06T18:00:00Z',followers:999});
+ await page.locator('#refresh').click();
+ await page.locator('#account-cards summary').getByText('Другие источники и периоды (5)',{exact:true}).waitFor();
+ assert.equal(await page.locator('#account-cards .observation-card').count(),1);
+ assert.equal(await page.locator('#account-cards .account-timeline').count(),1);
+ assert.equal(await page.locator('#account-cards .account-periods').getAttribute('open'),null);
+ assert.equal(await page.locator('#account-cards .metric-value').first().innerText(),'2');
+ const periodSummary=page.locator('#account-cards .account-periods > summary');
+ await periodSummary.focus();await page.keyboard.press('Enter');
+ assert.equal(await page.locator('#account-cards .account-periods tbody tr').count(),5);
+ assert.equal(await page.locator('#account-cards .account-periods tbody tr').first().getByText('999',{exact:true}).isVisible(),true);
+ await periodSummary.click();
+ await page.locator('#account-cards .account-week').nth(3).getByText('Изменение +2',{exact:true}).waitFor();
+ await page.locator('#account-cards .account-week').nth(3).getByText('05.10 → 06.10',{exact:true}).waitFor();
  const weeks=page.locator('#account-cards .account-week');
  assert.equal(await weeks.count(),4);
  assert.deepEqual(await weeks.locator('.account-week-value').allTextContents(),['3','0','—','2']);
@@ -75,6 +89,7 @@ try {
  await page.locator('#account-cards .account-metric-select select').selectOption('followers');
  await page.locator('#account-cards .chart-values summary').focus(); await page.keyboard.press('Enter');
  assert.equal(await page.locator('#account-cards .measured-points li').count(),4);
+ await page.locator('#account-cards .chart-values summary').click();
  assert.equal(await page.locator('.collector-management').getAttribute('open'),null);
  await page.locator('#last-update').getByText('Последний сбор завершился с ошибкой; показаны сохранённые данные',{exact:true}).waitFor();
  await shot('ux-overview-desktop');

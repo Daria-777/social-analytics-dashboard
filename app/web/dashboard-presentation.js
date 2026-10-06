@@ -75,15 +75,28 @@ export function accountWeeks(points, timeZone, now = new Date(), key = "follower
   };
   const monday = date => date - ((new Date(date).getUTCDay()+6)%7)*day;
   const grouped=new Map();
-  for (const point of points) {
+  const ordered=[...points].sort((a,b)=>Date.parse(a.snapshot_at)-Date.parse(b.snapshot_at));
+  const previous=new Map(ordered.slice(1).map((point,index)=>[point,ordered[index]]));
+  for (const point of ordered) {
     const start=monday(localDay(point.snapshot_at));
     if (!grouped.has(start) || Date.parse(grouped.get(start).snapshot_at)<Date.parse(point.snapshot_at)) grouped.set(start,point);
   }
   const starts=[...grouped.keys()], current=monday(localDay(now));
   const weeks=[];
   for (let start=Math.min(...starts);start<=Math.max(...starts);start+=7*day) {
-    const snapshot=grouped.get(start);
-    weeks.push({start:new Date(start).toISOString().slice(0,10),end:new Date(start+6*day).toISOString().slice(0,10),value:snapshot?.[key]??null,snapshot:snapshot??null,current:start===current});
+    const snapshot=grouped.get(start),before=previous.get(snapshot);
+    weeks.push({start:new Date(start).toISOString().slice(0,10),end:new Date(start+6*day).toISOString().slice(0,10),value:snapshot?.[key]??null,snapshot:snapshot??null,current:start===current,change:before?{delta:snapshot[key]-before[key],from:before.snapshot_at,to:snapshot.snapshot_at}:null});
   }
   return weeks;
+}
+
+// One visible account summary; retain distinct sources and periods in disclosure.
+export function accountOverview(history, platform) {
+  const latest=new Map();
+  const context=s=>JSON.stringify([s.source,s.metric_scope,s.source_period_start,s.source_period_end,s.snapshot_status]);
+  for (const snapshot of [...history].filter(s=>Number.isFinite(Date.parse(s.snapshot_at))).sort((a,b)=>Date.parse(a.snapshot_at)-Date.parse(b.snapshot_at))) latest.set(context(snapshot),snapshot);
+  const rows=[...latest.values()].sort((a,b)=>Date.parse(b.snapshot_at)-Date.parse(a.snapshot_at));
+  const current=rows.filter(s=>s.metric_scope==='current');
+  const primary=current.find(s=>s.source===platform+'_api')??current[0]??null;
+  return {primary,additional:rows.filter(s=>s!==primary)};
 }
