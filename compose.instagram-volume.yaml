@@ -1,0 +1,60 @@
+# Add after compose.yaml and the existing TikTok override; do not share its volume.
+services:
+  instagram-credentials-init:
+    build: .
+    user: "0:0"
+    network_mode: none
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes: &instagram_volume
+      - type: volume
+        source: instagram_credentials
+        target: /run/dash-instagram/.instagram-credentials
+        volume:
+          nocopy: true
+    command:
+      - python
+      - -c
+      - |
+        import os, stat
+        from pathlib import Path
+        p = Path('/run/dash-instagram/.instagram-credentials')
+        s = p.lstat()
+        if not stat.S_ISDIR(s.st_mode): raise SystemExit('Invalid Instagram credential directory')
+        if any(p.iterdir()):
+            if s.st_uid != 10001 or stat.S_IMODE(s.st_mode) != 0o700:
+                raise SystemExit('Existing Instagram credential directory refused')
+        else:
+            os.chown(p, 10001, 10001)
+            os.chmod(p, 0o700)
+        print('Private Instagram credential directory ready')
+  api:
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16777216"]
+    environment: &instagram_environment
+      INSTAGRAM_ACCESS_TOKEN: ""
+      INSTAGRAM_CREDENTIAL_STORE: /run/dash-instagram/.instagram-credentials
+      INSTAGRAM_AUTO_REFRESH_ENABLED: ${INSTAGRAM_AUTO_REFRESH_ENABLED:-false}
+      INSTAGRAM_RENEWAL_RUNTIME: docker
+    volumes: *instagram_volume
+    depends_on:
+      instagram-credentials-init:
+        condition: service_completed_successfully
+  scheduler:
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16777216"]
+    environment: *instagram_environment
+    volumes: *instagram_volume
+    depends_on:
+      instagram-credentials-init:
+        condition: service_completed_successfully
+volumes:
+  instagram_credentials:

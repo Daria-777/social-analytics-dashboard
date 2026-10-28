@@ -10,6 +10,8 @@ from app.api import authenticate
 from app.config import Settings
 from app.connectors.tiktok.credentials import resolve_settings
 from app.connectors.tiktok.errors import TikTokError
+from app.connectors.instagram.credentials import resolve_settings as resolve_instagram_settings
+from app.connectors.instagram.errors import InstagramError
 from app.dashboard_auth import COOKIE,session_token,same_origin
 
 router=APIRouter()
@@ -30,7 +32,7 @@ def privacy(): return FileResponse(WEB/'privacy.html')
 
 
 @router.get('/dashboard/assets/{name}',include_in_schema=False)
-def assets(name:Literal['dashboard.css','dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-forms.js','dashboard-preview.js','dashboard-reports.js','dashboard-presentation.js','dashboard-charts.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','collection-agent.svg','favicon.svg']): return FileResponse(WEB/name)
+def assets(name:Literal['dashboard.css','dashboard.js','dashboard-core.js','dashboard-detail.js','dashboard-growth.js','dashboard-forms.js','dashboard-preview.js','dashboard-reports.js','dashboard-presentation.js','dashboard-charts.js','dashboard-auto-update.js','platform-instagram.svg','platform-tiktok.svg','collection-automatic.svg','collection-manual.svg','collection-agent.svg','favicon.svg']): return FileResponse(WEB/name)
 
 
 @router.get('/favicon.ico',include_in_schema=False)
@@ -80,4 +82,9 @@ def configuration():
         tiktok_ready=bool(tiktok_settings.tiktok_access_token and tiktok_settings.tiktok_access_token.get_secret_value().strip())
     except TikTokError:
         tiktok_ready=False
-    return {'display_timezone':settings.display_timezone,'test_database':make_url(settings.database_url.get_secret_value()).database=='test_dash','scheduler_configured':settings.scheduler_enabled,'instagram_ready':bool(settings.instagram_access_token and settings.instagram_access_token.get_secret_value().strip()),'tiktok_ready':tiktok_ready}
+    try:
+        instagram_settings=resolve_instagram_settings(settings)
+        instagram_ready=bool(instagram_settings.instagram_access_token and instagram_settings.instagram_access_token.get_secret_value().strip())
+    except InstagramError:
+        instagram_ready=False
+    return {'display_timezone':settings.display_timezone,'test_database':make_url(settings.database_url.get_secret_value()).database=='test_dash','scheduler_configured':settings.scheduler_enabled,'scheduler_collection_frequency':settings.scheduler_collection_frequency,'instagram_ready':instagram_ready,'tiktok_ready':tiktok_ready}

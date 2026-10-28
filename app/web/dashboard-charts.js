@@ -1,6 +1,6 @@
 import {node,put,fmt,metric,date,labels,provenance,platformMark,dataContext,empty,state,table} from './dashboard-core.js';
 import {preview} from './dashboard-preview.js';
-import {chartGroups,historyPoints,accountTrend,accountWeeks,accountMetrics,accountPeriodMetrics,accountDailyMetrics} from './dashboard-presentation.js';
+import {chartGroups,historyPoints,accountTrend,accountWeeks,accountMetrics,accountPeriodMetrics,accountDailyMetrics,accountDayPending} from './dashboard-presentation.js';
 const ns='http://www.w3.org/2000/svg';
 const colors=['#067462','#a34f21','#365e83','#715b7f','#646a24'];
 const shapes=['circle','square','triangle','diamond'];
@@ -170,16 +170,21 @@ export function accountDailyTable(history,latest,source,accountTitle) {
   const keys=accountPeriodMetrics.filter(key=>rows.some(row=>row.activity?.[key]!=null));
   const daily=rows.every(row=>!row.activity||row.daily);
   const dateOnly=value=>new Intl.DateTimeFormat('ru-RU',{timeZone:'UTC',dateStyle:'short'}).format(new Date(value+'T12:00:00Z'));
-  const values=rows.map(row=>{
+  const pending=rows.map(row=>accountDayPending(row,latest,source));
+  const values=rows.map((row,index)=>{
     const delta=row.values.followers;
     const change=node('span',delta==null?'Нет сравнения':`${delta>0?'+':''}${fmt(delta,0)}`,delta==null?'muted':null);
     let dates=row.start===row.end?dateOnly(row.end):dateOnly(row.start)+' → '+dateOnly(row.end);
     if(!row.daily) dates='Период: '+dates;
+    if(pending[index]&&keys.length) return [dates,change,node('span','Ожидается обновление','muted')];
     return [dates,change,...keys.map(key=>row.activity?.[key]==null?node('span','Нет данных','muted'):fmt(row.activity[key],0))];
   });
   const wrap=node('div',null,'table-wrap daily-metrics-table');wrap.tabIndex=0;
   wrap.setAttribute('role','region');wrap.setAttribute('aria-label','Динамика показателей по дням');
   const grid=table(['Дата','Изменение подписчиков',...keys.map(key=>labels[key]+(daily?' за день':' за период'))],values);
+  grid.querySelectorAll('tbody tr').forEach((tr,index)=>{
+    if(pending[index]&&keys.length) tr.cells[2].colSpan=keys.length;
+  });
   const columns=node('colgroup');
   for(let i=0;i<2+keys.length;i++) columns.append(node('col'));
   grid.prepend(columns);

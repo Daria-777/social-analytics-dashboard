@@ -9,7 +9,7 @@ class ImportMissingError(ValueError): pass
 class ImportIdentityError(ValueError): pass
 
 
-def import_batch(db,batch):
+def import_batch(db,batch,*,commit=True):
     rows={'content':[],'account':[],'retention':[]}
     try:
         for records,model,parent_model,parent_field,selector,label in (
@@ -31,7 +31,7 @@ def import_batch(db,batch):
                 if label=='content':
                     for geo in record.geography:
                         db.add(ContentGeoSnapshot(content_snapshot_id=row.id,**geo.model_dump()))
-        db.commit()
+        if commit: db.commit()
     except Exception:
         db.rollback();raise
     return rows

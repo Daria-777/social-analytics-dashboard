@@ -176,3 +176,27 @@ assert.deepEqual(publicationSelection([apiRow,{...apiRow,snapshot:{...apiRow.sna
 assert.deepEqual(publicationSelection([{content:{id:'no-data'},snapshot:null}]).map(r=>r.content.id),['no-data']);
 assert.equal(duplicateRows.length,2);
 console.log('Publication selection: one complete observation, API priority, explicit source, metric fallback, quality, period, zero and history preserved');
+
+// An upcoming day request differs from an unavailable metric or an old gap.
+const {accountDayPending}=await import('../app/web/dashboard-presentation.js');
+const pendingDay={start:'2026-10-07',end:'2026-10-07',daily:true,activity:null};
+const latest7=a('2026-10-07T09:04:00Z',3),beforeCollection='2026-10-08T07:00:00Z';
+assert.equal(accountDayPending(pendingDay,latest7,'instagram_api',beforeCollection),true);
+assert.equal(accountDayPending(pendingDay,latest7,'instagram_api','2026-10-07T22:00:00Z'),true);
+assert.equal(accountDayPending(pendingDay,a('2026-10-08T09:04:00Z',3),'instagram_api','2026-10-08T10:00:00Z'),false);
+assert.equal(accountDayPending(pendingDay,latest7,'instagram_api','2026-10-09T07:00:00Z'),false);
+assert.equal(accountDayPending({...pendingDay,activity:{views:0,likes:null}},latest7,'instagram_api',beforeCollection),false);
+assert.equal(accountDayPending({...pendingDay,start:'2026-10-06'},latest7,'instagram_api',beforeCollection),false);
+assert.equal(accountDayPending(pendingDay,{...latest7,source:'tiktok_api'},'tiktok_api',beforeCollection),false);
+assert.equal(accountDayPending(pendingDay,{...latest7,source:'instagram_ui'},'instagram_api',beforeCollection),false);
+assert.equal(accountDayPending(pendingDay,null,'instagram_api',beforeCollection),false);
+assert.equal(accountDayPending(pendingDay,{...latest7,snapshot_at:'invalid'},'instagram_api',beforeCollection),false);
+console.log('Pending daily statistics: recent unrequested Instagram days only; received partial metrics, attempted days, old gaps, intervals and TikTok stay unavailable');
+
+const { collectionWarning } = await import('../app/web/dashboard-presentation.js');
+assert.match(collectionWarning('instagram',{last_status:'failed',last_error_type:'InstagramAuthError'}),/Instagram.*подключить заново/);
+assert.match(collectionWarning('instagram',{last_status:'partial',last_error_type:'InstagramPermissionError'}),/разрешения/);
+assert.equal(collectionWarning('instagram',{last_status:'success',last_error_type:'InstagramAuthError'}),null);
+assert.match(collectionWarning('instagram',{last_status:'failed',last_error_type:'InstagramAPIError'}),/ошибкой/);
+assert.equal(collectionWarning('tiktok',{last_status:'success'}),null);
+console.log('Collector warnings: auth, permissions, transient failure and successful recovery passed');

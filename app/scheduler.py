@@ -1,4 +1,4 @@
-"""Opt-in daily and young-publication jobs. No stale-running reset."""
+"""Opt-in full-account and young-publication jobs. No stale-running reset."""
 from dataclasses import dataclass,field
 from datetime import datetime,timedelta,timezone
 from uuid import UUID,uuid5,NAMESPACE_URL
@@ -9,6 +9,8 @@ from app.connectors.locks import advisory_lock
 from app.connectors.persistence import CollectionBusyError
 from app.connectors.instagram.client import InstagramClient
 from app.connectors.instagram.service import InstagramCollector
+from app.connectors.instagram.credentials import resolve_settings as resolve_instagram_settings
+from app.connectors.instagram.errors import InstagramError
 from app.connectors.tiktok.client import TikTokClient
 from app.connectors.tiktok.credentials import resolve_settings,CredentialStore
 from app.connectors.tiktok.errors import TikTokError
@@ -30,6 +32,8 @@ class ScheduledJob:
 
 
 def configured(settings,platform):
+    if platform==Platform.INSTAGRAM and settings.instagram_credential_store:
+        return True  # A broken store must create a visible failed run, not hide jobs.
     if platform==Platform.TIKTOK and settings.tiktok_credential_store:
         try:settings=resolve_settings(settings)
         except TikTokError:return False
@@ -47,10 +51,12 @@ def planned_jobs(db,settings,now):
             try:settings=resolve_settings(settings,now=now)
             except TikTokError:continue
         if not configured(settings,platform): continue
-        due=now.replace(hour=settings.scheduler_daily_hour_utc,minute=0,second=0,microsecond=0)
+        hourly=settings.scheduler_collection_frequency=='hourly'
+        due=now.replace(minute=0,second=0,microsecond=0) if hourly else now.replace(hour=settings.scheduler_daily_hour_utc,minute=0,second=0,microsecond=0)
         if due<=now:
-            key=f'daily:{platform.value}:{due.date().isoformat()}'
-            jobs[key]=ScheduledJob(uuid5(NAMESPACE_URL,'dash:schedule:'+key),platform,due,'daily')
+            key=f'hourly:{platform.value}:{due.isoformat()}' if hourly else f'daily:{platform.value}:{due.date().isoformat()}'
+            jobs[key]=ScheduledJob(uuid5(NAMESPACE_URL,'dash:schedule:'+key),platform,due,'hourly' if hourly else 'daily')
+            periodic=jobs[key]
         owner_id=settings.instagram_user_id if platform==Platform.INSTAGRAM else settings.tiktok_open_id
         expected=settings.instagram_expected_username if platform==Platform.INSTAGRAM else settings.tiktok_expected_username
         posts_query=select(Content).join(SocialAccount,SocialAccount.id==Content.account_id).where(Content.platform==platform,Content.published_at>=now-timedelta(days=8),Content.published_at<=now)
@@ -62,6 +68,10 @@ def planned_jobs(db,settings,now):
                 due=exact.replace(minute=0,second=0,microsecond=0)
                 if exact!=due: due+=timedelta(hours=1)
                 if due>now or now-due>timedelta(hours=settings.scheduler_max_lateness_hours): continue
+                if hourly:
+                    # One full-account job already captures both discovery and milestones.
+                    if due==periodic.due_at:periodic.targets.append({'content_id':str(post.id),'age_hours':hours})
+                    continue
                 key=f'age:{platform.value}:{due.isoformat()}'
                 job=jobs.setdefault(key,ScheduledJob(uuid5(NAMESPACE_URL,'dash:schedule:'+key),platform,due,'age'))
                 job.targets.append({'content_id':str(post.id),'age_hours':hours})
@@ -70,6 +80,7 @@ def planned_jobs(db,settings,now):
 
 def collect_job(job,settings,db):
     if job.platform==Platform.INSTAGRAM:
+        settings=resolve_instagram_settings(settings,allow_refresh=True)
         with InstagramClient(settings.require_instagram_token(),settings.instagram_api_version) as client:
             return InstagramCollector(settings,db,client).collect(run_id=job.run_id)
     settings=resolve_settings(settings,allow_refresh=True)
@@ -111,13 +122,13 @@ def run_tick(db,settings,now,*,runner=None):
             try: result=runner(job) if runner else collect_job(job,settings,db)
             except CollectionBusyError:
                 results.append({**job.public(),'status':'busy'});continue
-            except TikTokError:
+            except (TikTokError,InstagramError):
                 unavailable.add(job.platform)
                 renewal_failed=True
                 if run is None:
                     run=CollectorRun(id=job.run_id,platform=job.platform,started_at=now);db.add(run)
                 run.status=CollectorStatus.FAILED;run.finished_at=now
-                run.error_type='TikTokCredentialRenewalError'
+                run.error_type='TikTokCredentialRenewalError' if job.platform==Platform.TIKTOK else 'InstagramCredentialRenewalError'
                 run.summary={**(run.summary or {}),'status':'failed','failures':max((run.summary or {}).get('failures') or 0,1)}
                 db.flush()
                 result=run.summary
@@ -127,5 +138,5 @@ def run_tick(db,settings,now,*,runner=None):
             retry=now+timedelta(minutes=settings.scheduler_retry_minutes*(2**(attempts-1)))
             schedule={**job.public(),'attempts':attempts,'next_retry_at':retry.isoformat() if result['status'] in ('failed','partial') and attempts<settings.scheduler_max_attempts else None}
             run.summary={**(run.summary or {}),'schedule':schedule};db.commit()
-            results.append({**job.public(),'status':result['status'],'attempts':attempts,**({'error_type':'TikTokCredentialRenewalError'} if renewal_failed else {})})
+            results.append({**job.public(),'status':result['status'],'attempts':attempts,**({'error_type':run.error_type} if renewal_failed else {})})
     return results

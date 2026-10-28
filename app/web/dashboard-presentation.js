@@ -1,7 +1,7 @@
 // Presentation only: do not aggregate sources, invent values or alter analytics.
 export function sortObservations(rows, order) {
   const byDate = (a, b) => (Date.parse(b.content.published_at) || 0) - (Date.parse(a.content.published_at) || 0);
-  if (order !== 'views') return [...rows].sort(byDate);
+  if (!['views','comments'].includes(order)) return [...rows].sort(byDate);
   const groups = new Map();
   for (const r of rows) {
     const s = r.snapshot || {};
@@ -10,11 +10,26 @@ export function sortObservations(rows, order) {
     groups.get(context).push(r);
   }
   return [...groups.values()].flatMap(group => [...group].sort((a, b) => {
-    const av = a.snapshot?.views, bv = b.snapshot?.views;
+    const av = a.snapshot?.[order], bv = b.snapshot?.[order];
     if (av == null) return bv == null ? byDate(a, b) : 1;
     if (bv == null) return -1;
     return Number(bv) - Number(av) || byDate(a, b);
   }));
+}
+export function commentAttentionLabel(row) {
+  return row.new_comments==null ? `Всего: ${row.comments} · ещё не отмечено проверенным`
+    : `+${row.new_comments} после отметки · всего: ${row.comments}`;
+}
+export function commentPermalink(content) {
+  try {
+    const u=new URL(content.permalink);
+    if(u.protocol!=='https:' || u.username || u.password) return null;
+    const allowed=content.platform==='instagram'
+      ? ['instagram.com','www.instagram.com'].includes(u.hostname) && /^\/(p|reel|reels)\/[\w-]+\/?$/.test(u.pathname)
+      : content.platform==='tiktok' && ['tiktok.com','www.tiktok.com'].includes(u.hostname) && /^\/@[^/]+\/video\/\d+\/?$/.test(u.pathname);
+    if(!allowed) return null;
+    u.search='';u.hash='';return u.href;
+  } catch {return null;}
 }
 export function exactWindow(p) {
   return p.actual_age_hours != null && p.actual_age_hours === p.requested_age_hours;
@@ -179,6 +194,16 @@ export function accountDailyMetrics(history, latest, source) {
 }
 
 
+// Only recent, unrequested Instagram days are pending; missing returned metrics stay unavailable.
+export function accountDayPending(row, latest, source, now=new Date()) {
+  if(source!=='instagram_api'||latest?.source!==source||latest.metric_scope!=='current'||row.activity||!row.daily||row.start!==row.end) return false;
+  const collected=Date.parse(latest.snapshot_at),at=new Date(now).getTime();
+  if(!Number.isFinite(collected)||!Number.isFinite(at)) return false;
+  const today=new Date(at).toISOString().slice(0,10);
+  const yesterday=new Date(at-86400000).toISOString().slice(0,10);
+  return [today,yesterday].includes(row.end)&&new Date(collected).toISOString().slice(0,10)<=row.end;
+}
+
 // Pick a whole observation per publication; never combine metrics from different sources.
 export function publicationSelection(rows, {source="", key="views"} = {}) {
   const selected = new Map();
@@ -237,4 +262,12 @@ export function comparisonSelection(rows, {platform, source, format, key, groupB
   const results=[...groups.values()].map(g=>({...g,n:g.values.length,mean:g.values.length ? g.values.reduce((a,b)=>a+b,0)/g.values.length : null}));
   results.sort((a,b)=>a.mean==null ? b.mean==null ? 0 : 1 : b.mean==null ? -1 : b.mean-a.mean);
   return {groups:results,quality,periods,anomalies:excluded.filter(r=>r.snapshot.snapshot_status==="anomalous").length,otherQuality:excluded.filter(r=>r.snapshot.snapshot_status!=="anomalous").length,total:candidates.length,available:results.reduce((n,g)=>n+g.n,0)};
+}
+export function collectionWarning(platform, health) {
+  if (!['failed', 'partial'].includes(health.last_status)) return null;
+  if (platform === 'instagram' && health.last_error_type === 'InstagramAuthError')
+    return 'Instagram нужно подключить заново. Доступ отклонён; обновление статистики прервано. Показаны ранее сохранённые измерения. Кнопка «Обновить данные» не восстанавливает авторизацию.';
+  if (platform === 'instagram' && health.last_error_type === 'InstagramPermissionError')
+    return 'Instagram: проверьте разрешения подключения для чтения статистики. Часть данных недоступна; показаны сохранённые измерения.';
+  return health.last_status === 'failed' ? 'Последний сбор завершился с ошибкой; показаны сохранённые данные' : 'Последний сбор неполный; часть показателей могла не обновиться';
 }

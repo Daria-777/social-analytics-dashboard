@@ -34,11 +34,12 @@ import {
   submit,
 } from "./dashboard-core.js";
 import { accountTimeline, accountDailyTable, publicationBars } from "./dashboard-charts.js";
-import { sortObservations, publicationSelection, updateTimes, accountOverview, accountPeriodInsights, accountMetrics, comparisonFormat, comparisonSelection } from "./dashboard-presentation.js";
+import { commentAttentionLabel, commentPermalink, collectionWarning, sortObservations, publicationSelection, updateTimes, accountOverview, accountPeriodInsights, accountMetrics, comparisonFormat, comparisonSelection } from "./dashboard-presentation.js";
 import { updateMetricAvailability } from "./dashboard-forms.js";
 import { setupReports } from "./dashboard-reports.js";
 import { preview, setupPreview } from "./dashboard-preview.js";
 import { openDetail } from "./dashboard-detail.js";
+import { createCollectionWatcher } from "./dashboard-auto-update.js";
 import {
   setupForms,
   prepareObservation,
@@ -198,8 +199,12 @@ async function overview() {
   });
   put("collector-cards", ...collectors);
   $("schedule-status").textContent = state.config.scheduler_configured
-    ? "Расписание настроено. История показывает завершённые запуски; активность процесса здесь не проверяется."
+    ? (state.config.scheduler_collection_frequency==="hourly" ? "Сбор Instagram и TikTok каждый час. " : "Ежедневное расписание настроено. ") + "История показывает завершённые запуски; активность процесса здесь не проверяется."
     : "Автоматическое расписание выключено.";
+  const collectionIcon=$("collection-note").querySelector("img");
+  $("collection-note").replaceChildren(...(collectionIcon?[collectionIcon]:[]),
+    document.createTextNode(state.config.scheduler_configured && state.config.scheduler_collection_frequency==="hourly"
+      ? "Автоматическое обновление каждый час" : "Автоматическое обновление по API"));
   const runRows = runs.map((r) => {
     const tr = node("tr");
     [
@@ -278,7 +283,7 @@ function publicationCard(r, availableOnly = false) {
   head.append(preview(c), text);
   box.append(head);
   if (!s) { box.append(node("p", "Наблюдений пока нет в этой выборке", "muted")); return box; }
-  const keys = ["views", "likes", "shares"].filter(k => !availableOnly || s[k] != null);
+  const keys = ["views", "likes", "comments", "shares"].filter(k => !availableOnly || s[k] != null);
   const values = node("div", null, "metric-strip");
   for (const k of keys) { const m = node("div"); m.append(node("strong", fmt(s[k]), "metric-value"), node("span", labels[k], "metric-label")); values.append(m); }
   box.append(values, dataContext(s, true));
@@ -324,7 +329,7 @@ function renderContent() {
       return [preview(r.content), cell, ...keys.map(k => metric(r.derived?.[k] ?? s?.[k], k))];
     })) : selectionEmpty();
   }
-  put("content-table", contentTable(["views", "likes", "shares"], true));
+  put("content-table", contentTable(["views", "likes", "comments", "shares"], true));
   put("content-full-table", contentTable(contentKeys));
   $("content-count").textContent = `${rows.length} публикаций${state.comparison.truncated ? " · выборка ограничена 1000; сузьте фильтры" : ""}`;
 
@@ -340,7 +345,7 @@ function renderUpdateInfo() {
     const health = state.collectionHealth?.[p];
     info.append(platformContext(p, `Измерение: ${date(measured.latest)} · Успешный сбор: ${date(health?.last_success_at)}`));
   }
-  const warnings = Object.entries(state.collectionHealth || {}).filter(([p])=>state.view === "overview" || !$("filter-platform").value || p===$("filter-platform").value).flatMap(([p,s]) => s.last_status === "failed" || s.last_status === "partial" ? [platformContext(p,s.last_status === "failed" ? "Последний сбор завершился с ошибкой; показаны сохранённые данные" : "Последний сбор неполный; часть показателей могла не обновиться")] : []);
+  const warnings = Object.entries(state.collectionHealth || {}).filter(([p])=>state.view === "overview" || !$("filter-platform").value || p===$("filter-platform").value).flatMap(([p,s]) => { const text = collectionWarning(p,s); if (!text) return []; const warning = platformContext(p,text); warning.setAttribute("role","alert"); return [warning]; });
   put("last-update", node("p", times.latest ? `Последнее обновление данных: ${date(times.latest)}` : "Время обновления пока неизвестно", "muted"), ...warnings, ...(platforms.length ? [info] : []));
 }
 function renderComparison() {
@@ -432,6 +437,33 @@ function renderComparison() {
   }
   put("comparison-cards",list);
 }
+let attentionRequest=0;
+async function loadCommentAttention() {
+  const request=++attentionRequest;
+  try {
+    const data=await api('/comments/attention?limit=1000');
+    if(request!==attentionRequest) return;
+    message('comment-attention-error','');
+    $('comment-attention-count').textContent=data.rows.length ? `Публикаций: ${data.rows.length}${data.truncated?' · показана часть списка':''}` : 'Нет комментариев для проверки';
+    put('comment-attention-list',...data.rows.map(row=>{
+      const article=node('article',null,'comment-attention-row'), info=node('div');
+      info.append(platformContext(row.content.platform,title(row.content)),node('strong',commentAttentionLabel(row)),
+        node('span',`Измерено: ${date(row.snapshot_at)}`,'muted'));
+      const actions=node('div',null,'comment-attention-actions'), url=commentPermalink(row.content);
+      if(url) {
+        const link=node('a','Открыть комментарии','outlined');link.href=url;link.target='_blank';link.rel='noopener noreferrer';actions.append(link);
+      } else actions.append(contentLink(row.content));
+      actions.append(button('Проверено',async()=>{
+        ++attentionRequest;
+        await api('/comments/review',{method:'POST',body:JSON.stringify({content_id:row.content.id,snapshot_id:row.snapshot_id})});
+        await loadCommentAttention();
+      },'outlined'));
+      article.append(info,actions);return article;
+    }));
+  } catch {
+    if(request===attentionRequest) message('comment-attention-error','Не удалось проверить комментарии. Список может быть неактуален.',true);
+  }
+}
 async function refresh() {
   const b = $("refresh");
   b.disabled = true;
@@ -444,7 +476,7 @@ async function refresh() {
       all("/content"),
       all("/experiments"),
     ]);
-    const [, , manualData] = await Promise.all([overview(), contentAndComparison(), api("/analytics/content-comparison?limit=1000")]);
+    const [, , manualData] = await Promise.all([overview(), contentAndComparison(), api("/analytics/content-comparison?limit=1000"),loadCommentAttention()]);
     state.allComparisonData=manualData;
     renderComparison();
     renderManualMeasurements(manualData, state.manualAccountRows, async (c, source) => { await openDetail(c.id, source); view("detail"); $("detail-title").focus(); });
@@ -471,6 +503,16 @@ async function refresh() {
   }
 }
 $("refresh").addEventListener("click", refresh);
+const checkForUpdates=createCollectionWatcher({
+  canRefresh:()=>!document.hidden && !$("workspace").hidden && !$("refresh").disabled
+    && ["overview","content","comparison"].includes(state.view)
+    && !document.querySelector('dialog[open], input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus'),
+  currentHealth:()=>state.collectionHealth,
+  readHealth:()=>api("/collectors/status"),
+  refresh,
+});
+setInterval(checkForUpdates,60000);
+document.addEventListener("visibilitychange",checkForUpdates);
 $("filters").addEventListener("submit", async (e) => {
   e.preventDefault();
   const params = new URLSearchParams();

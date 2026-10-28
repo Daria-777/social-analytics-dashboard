@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {commentAttentionLabel,commentPermalink,sortObservations} from '../app/web/dashboard-presentation.js';
+assert.equal(commentAttentionLabel({comments:1,new_comments:null}),'Всего: 1 · ещё не отмечено проверенным');
+assert.equal(commentAttentionLabel({comments:5,new_comments:3}),'+3 после отметки · всего: 5');
+assert.equal(commentPermalink({platform:'instagram',permalink:'https://www.instagram.com/reel/Abc_12/?utm_source=test'}),'https://www.instagram.com/reel/Abc_12/');
+assert.equal(commentPermalink({platform:'tiktok',permalink:'https://www.tiktok.com/@demo/video/123'}),'https://www.tiktok.com/@demo/video/123');
+for(const url of ['javascript:alert(1)','https://evil.example/reel/Abc/','https://www.instagram.com/accounts/login/','https://a:b@www.instagram.com/reel/Abc/'])assert.equal(commentPermalink({platform:'instagram',permalink:url}),null);
+const rows=[{content:{id:'zero'},snapshot:{comments:0}},{content:{id:'unknown'},snapshot:{comments:null}},{content:{id:'three'},snapshot:{comments:3}}];
+assert.deepEqual(sortObservations(rows,'comments').map(r=>r.content.id),['three','zero','unknown']);
+console.log('Comments: initial vs new counts, zero vs unknown, ordering and safe platform links passed');

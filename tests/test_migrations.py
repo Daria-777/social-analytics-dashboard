@@ -10,7 +10,7 @@ def test_migration_upgrade_downgrade_and_no_drift(tmp_path, monkeypatch):
     config = Config("alembic.ini")
     command.upgrade(config, "head")
     engine = create_engine(url)
-    assert set(inspect(engine).get_table_names()) == {"alembic_version", "social_accounts", "content", "account_snapshots", "content_snapshots", "experiments", "content_experiments", "collector_runs", "content_retention_snapshots", "content_geo_snapshots"}
+    assert set(inspect(engine).get_table_names()) == {"alembic_version", "social_accounts", "content", "account_snapshots", "content_snapshots", "experiments", "content_experiments", "collector_runs", "content_retention_snapshots", "content_geo_snapshots", "comment_reviews", "growth_analyses", "agent_imports"}
     assert 'preview_url' in {c['name'] for c in inspect(engine).get_columns('content')}
     command.check(config)
     engine.dispose()

@@ -18,6 +18,7 @@ try {
  const account={id:'account',platform:'instagram',username:'fixture'};
  let accountsFixture=[account],tiktokHistory=[];
  const manualRows=[];
+ let instagramHealth={last_success_at:"2026-10-05T16:00:00Z",last_status:"success"};
  const posted=[]; let experiments=[]; let connected=true; let history=[rows[0].snapshot]; let retention=[]; let accountHistory=[{source:'instagram_api',metric_scope:'current',snapshot_status:'confirmed',snapshot_at:'2026-10-05T16:00:00Z',followers:0,following:2}];
  const summaries=Object.fromEntries(['views','average_watch_pct','completion_rate','share_rate','save_rate','profile_visit_rate','follow_conversion'].map(k=>[k,{n:k==='views'?2:0,mean:k==='views'?12.5:null,median:k==='views'?12.5:null,guardrail:'insufficient_sample'}]));
  await page.route('**/*',async route=>{
@@ -40,7 +41,7 @@ try {
   else if(p==='/experiments') payload=experiments;
   else if(p==='/accounts/account/history') payload=accountHistory;
   else if(p==='/accounts/tiktok-account/history') payload=tiktokHistory;
-  else if(p==='/collectors/status') payload={instagram:{last_success_at:'2026-10-05T16:00:00Z',last_status:'success'},tiktok:{last_status:'failed'}};
+  else if(p==='/collectors/status') payload={instagram:instagramHealth,tiktok:{last_status:'failed'}};
   else if(p==='/collectors/runs') payload=[];
   else if(p==='/analytics/content-comparison') {
    const selected=[...rows,...manualRows].filter(r=>contents.some(c=>c.id===r.content.id)&&(!url.searchParams.has('series'))&&(!url.searchParams.has('platform')||r.content.platform===url.searchParams.get('platform'))&&(!url.searchParams.has('source')||r.snapshot.source===url.searchParams.get('source')));
@@ -48,6 +49,7 @@ try {
   } else if(p==='/analytics/content/one') payload={content:contents[0],latest:[rows[0]]};
   else if(p==='/content/one/history') payload=history;
   else if(p==='/content/one/retention') payload=retention;
+  else if(p==='/growth/content/one/analyses') payload=[];
   else if(p==='/content/one/experiments') payload={links:[]};
   else if(p==='/analytics/content/one/velocity') payload={source:'instagram_api',points:[1,6,24,48,72].map(age=>({requested_age_hours:age,actual_age_hours:102,deviation_hours:102-age,views:25,snapshot_at:'2026-10-05T16:00:00Z'}))};
   else assert.fail('Unexpected fixture request '+p);
@@ -130,6 +132,13 @@ try {
 
  assert.equal(await page.locator('.collector-management').getAttribute('open'),null);
  await page.locator('#last-update').getByText('Последний сбор завершился с ошибкой; показаны сохранённые данные',{exact:true}).waitFor();
+ instagramHealth={...instagramHealth,last_status:'failed',last_error_type:'InstagramAuthError'};
+ await page.locator('#refresh').click();
+ await page.locator('#last-update [role=alert]').filter({hasText:'Instagram нужно подключить заново'}).waitFor();
+ await shot('ux-instagram-auth-warning');
+ instagramHealth={...instagramHealth,last_status:'success',last_error_type:null};
+ await page.locator('#refresh').click();
+ await page.getByText('Instagram нужно подключить заново.',{exact:false}).waitFor({state:'hidden'});
  await shot('ux-overview-desktop');
  if(process.env.UX_SCREENSHOT_DIR) await page.locator('#account-changes-section').screenshot({path:path.join(process.env.UX_SCREENSHOT_DIR,'daily-changes-desktop.png')});
  await page.setViewportSize({width:390,height:844});
