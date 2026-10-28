@@ -836,6 +836,16 @@ body:has(.photo-dialog[open]) { overflow: hidden; }
 .publication-heading > div { min-width: 0; flex: 1; }
 .publication-heading p { margin: 0.5rem 0; }
 .publication-card .metric-strip { margin: 1rem 0; gap: 1rem; }
+.publication-card .metric-strip { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.comment-attention { margin:1rem 0 1.5rem; padding:1rem; border:1px solid var(--accent); border-radius:var(--radius); background:var(--surface); }
+.comment-attention .section-heading { margin:0 0 .5rem; }
+.comment-attention h2 { font-size:1.05rem; margin:0; }
+.comment-attention > .muted { font-size:.8rem; margin:.65rem 0 0; }
+.comment-attention-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:1rem; padding:.75rem 0; border-top:1px solid var(--line); }
+.comment-attention-row > div:first-child { display:grid; gap:.25rem; min-width:0; flex:1 1 280px; overflow-wrap:anywhere; }
+.comment-attention-row .muted { font-size:.8rem; }
+.comment-attention-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.comment-attention-actions a { text-decoration:none; display:inline-flex; align-items:center; padding:.45rem .75rem; }
 .publication-card .metric-label { display: block; }
 .publication-card .metric-value { font-size: 1.5rem; }
 .title-link { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: normal; }
@@ -1215,3 +1225,5 @@ tbody tr:hover { background: #f2f8f5; }
   #view-overview > .section-heading h2 { font-size:1rem; }
   #view-overview > .section-heading .quiet { font-size:.75rem; padding:0 4px; min-height:44px; white-space:nowrap; }
 }
+
+#last-update [role="alert"] { color: var(--warn); padding: 0.75rem; border: 1px solid currentColor; border-radius: var(--radius); }

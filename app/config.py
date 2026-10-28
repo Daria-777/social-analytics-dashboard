@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_ignore_empty=True)
     database_url: SecretStr = SecretStr("postgresql+psycopg://localhost/dash")
     internal_api_key: SecretStr | None = None
+    growth_api_key: SecretStr | None = None
     display_timezone: str = "UTC"
     dash_domain: str | None = None
 
@@ -20,10 +21,14 @@ class Settings(BaseSettings):
     instagram_api_version: str = "v26.0"
     instagram_expected_username: str = ""
     instagram_max_pages: int = Field(100, ge=1, le=10000)
+    instagram_credential_store: Path | None = None
+    instagram_auto_refresh_enabled: bool = False
+    instagram_renewal_runtime: Literal["host", "docker"] = "host"
 
     dashboard_session_hours: int = Field(8, ge=1, le=24)
 
     scheduler_enabled: bool = False
+    scheduler_collection_frequency: Literal["daily", "hourly"] = "daily"
     scheduler_daily_hour_utc: int = Field(9, ge=0, le=23)
     scheduler_poll_seconds: int = Field(900, ge=60, le=86400)
     scheduler_max_attempts: int = Field(3, ge=1, le=10)
@@ -45,7 +50,7 @@ class Settings(BaseSettings):
     tiktok_renewal_runtime: Literal["host","docker"] = "host"
     tiktok_refresh_skew_seconds: int = Field(300,ge=0,le=3600)
 
-    @field_validator("tiktok_credential_store",mode="before")
+    @field_validator("tiktok_credential_store", "instagram_credential_store",mode="before")
     @classmethod
     def empty_store(cls,value):return None if value=="" else value
 

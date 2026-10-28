@@ -39,6 +39,17 @@ class SocialAccount(Identity, Updated, Base):
     account_type: Mapped[str | None] = mapped_column(Text)
 
 
+class CommentReview(Base):
+    __tablename__ = "comment_reviews"
+    __table_args__ = (CheckConstraint("comments >= 0", name="ck_comment_review_count"),)
+    content_id: Mapped[UUID] = mapped_column(ForeignKey("content.id"), primary_key=True)
+    snapshot_id: Mapped[UUID] = mapped_column(ForeignKey("content_snapshots.id"))
+    snapshot_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    snapshot_created_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    comments: Mapped[int] = mapped_column(BigInteger)
+    reviewed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
+
+
 class Experiment(Identity, Base):
     __tablename__ = "experiments"
     __table_args__ = (CheckConstraint("ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at", name="ck_experiment_dates"),)
@@ -249,3 +260,37 @@ def reject_snapshot_mutation(mapper, connection, target):
 for snapshot_model in (AccountSnapshot, ContentSnapshot, ContentRetentionSnapshot, ContentGeoSnapshot):
     event.listen(snapshot_model, "before_update", reject_snapshot_mutation)
     event.listen(snapshot_model, "before_delete", reject_snapshot_mutation)
+
+
+class GrowthAnalysis(Identity, Base):
+    __tablename__ = 'growth_analyses'
+    __table_args__ = (
+        UniqueConstraint('content_id','agent_run_id',name='uq_growth_content_run'),
+        CheckConstraint('data_cutoff_at <= analysis_snapshot_at',name='ck_growth_cutoff'),
+        CheckConstraint("hypothesis_status IN ('SUPPORTED','PARTIALLY_SUPPORTED','NOT_SUPPORTED','INCONCLUSIVE')",name='ck_growth_hypothesis'),
+        CheckConstraint("confidence IN ('LOW','MEDIUM','HIGH')",name='ck_growth_confidence'),
+    )
+    content_id: Mapped[UUID] = mapped_column(ForeignKey('content.id'),index=True)
+    agent_run_id: Mapped[UUID] = mapped_column(Uuid)
+    request_hash: Mapped[str] = mapped_column(Text)
+    analysis_snapshot_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    data_cutoff_at: Mapped[datetime] = mapped_column(UTCDateTime())
+    agent_version: Mapped[str] = mapped_column(Text)
+    hypothesis_status: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[str] = mapped_column(Text)
+    # Validated analytical fields and immutable copies of the cited observations.
+    result: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(),'postgresql'))
+    provenance: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(),'postgresql'))
+
+
+class AgentImport(Identity, Base):
+    __tablename__ = 'agent_imports'
+    __table_args__ = (UniqueConstraint('agent_run_id',name='uq_agent_import_run'),)
+    agent_run_id: Mapped[UUID] = mapped_column(Uuid)
+    request_hash: Mapped[str] = mapped_column(Text)
+    response: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(),'postgresql'))
+
+
+for snapshot_model in (GrowthAnalysis, AgentImport):
+    event.listen(snapshot_model,'before_update',reject_snapshot_mutation)
+    event.listen(snapshot_model,'before_delete',reject_snapshot_mutation)

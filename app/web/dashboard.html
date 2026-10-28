@@ -127,6 +127,12 @@
           </details><div id="active-filters" class="active-filters"></div>
           <div id="last-update" class="context-line"></div>
           <p id="collection-note" class="collection-mark" data-collection-mode="automatic"><img src="/dashboard/assets/collection-automatic.svg" alt="" width="16" height="16" />Автоматическое обновление по API</p>
+          <section id="comment-attention" class="comment-attention" aria-labelledby="comment-attention-title">
+            <div class="section-heading"><h2 id="comment-attention-title">Комментарии для проверки</h2><span id="comment-attention-count" role="status" aria-live="polite">Проверяю…</span></div>
+            <div id="comment-attention-list"></div>
+            <p id="comment-attention-error" role="alert"></p>
+            <p class="muted">Отметка «Проверено» сохраняется в дашборде. Рост счётчика может включать ваши собственные ответы; тексты комментариев открываются в соцсети.</p>
+          </section>
           <section
             id="view-overview"
             class="view"
@@ -181,9 +187,9 @@
               <span id="content-count" class="muted"></span>
             </div>
             <div class="content-controls">
-            <label class="sort-control">Порядок<select id="content-sort"><option value="date">Сначала новые публикации</option><option value="views">Просмотры: по убыванию</option></select></label>
+            <label class="sort-control">Порядок<select id="content-sort"><option value="date">Сначала новые публикации</option><option value="views">Просмотры: по убыванию</option><option value="comments">Комментарии: по убыванию</option></select></label>
             <details id="sort-help" hidden><summary>Как сравниваются просмотры</summary><p class="muted">Сортировка внутри групп по источнику, периоду и статусу.</p></details>
-            <div class="display-controls"><label>Вид<select id="content-display"><option value="list">Список</option><option value="chart">График</option></select></label><label id="chart-metric-control" hidden>Показатель графика<select id="content-chart-metric"><option value="views">Просмотры</option><option value="likes">Лайки</option><option value="shares">Репосты</option><option value="completion_rate">Досмотр, %</option><option value="average_watch_pct">Среднее время, % длины</option><option value="watch_time_avg_seconds">Среднее время, сек.</option></select></label></div>
+            <div class="display-controls"><label>Вид<select id="content-display"><option value="list">Список</option><option value="chart">График</option></select></label><label id="chart-metric-control" hidden>Показатель графика<select id="content-chart-metric"><option value="views">Просмотры</option><option value="likes">Лайки</option><option value="shares">Репосты</option><option value="comments">Комментарии</option><option value="completion_rate">Досмотр, %</option><option value="average_watch_pct">Среднее время, % длины</option><option value="watch_time_avg_seconds">Среднее время, сек.</option></select></label></div>
             </div>
             <div id="publication-chart" hidden></div>
             <div id="content-cards" class="publication-cards"></div>
@@ -268,6 +274,8 @@
             <div id="velocity-table" class="table-wrap"></div>
             <div class="section-heading"><h3>Удержание из интерфейса</h3><span data-entry-mode="assisted"></span></div>
             <div id="retention-table" class="table-wrap"></div>
+            <div class="section-heading"><h3>Growth · выводы и следующий тест</h3></div>
+            <div id="detail-growth" aria-live="polite"></div>
             <div class="section-heading"><h3>История и география</h3></div>
             <div id="detail-history" class="table-wrap"></div>
             <p id="history-limit" class="muted"></p>

@@ -24,6 +24,7 @@ import {
 } from "./dashboard-core.js";
 import { renderHistoryChart } from "./dashboard-charts.js";
 import { exactWindow } from "./dashboard-presentation.js";
+import { renderGrowth } from "./dashboard-growth.js";
 import { preview } from "./dashboard-preview.js";
 function observationSource(s, text) {
   const context = node("div", null, "observation-source");
@@ -47,12 +48,14 @@ const tags = {
 export async function openDetail(id, sourceOverride) {
   const source = sourceOverride ?? $("filter-source").value,
     q = source ? "?source=" + source : "";
-  const [data, history, retention, experiments] = await Promise.all([
+  const [data, history, retention, experiments, growth] = await Promise.all([
     api(`/analytics/content/${id}${q}`),
     all(`/content/${id}/history${q}`),
     all(`/content/${id}/retention${q}`),
     api(`/content/${id}/experiments`),
+    all(`/growth/content/${id}/analyses`),
   ]);
+  renderGrowth(growth);
   state.detail = data.content;
   state.detailSource = source;
   const c = data.content;

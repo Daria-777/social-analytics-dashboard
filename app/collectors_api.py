@@ -12,6 +12,8 @@ from app.connectors.tiktok.credentials import resolve_settings
 from app.connectors.tiktok.errors import TikTokError
 from app.connectors.tiktok.service import TikTokCollector
 from app.connectors.instagram.client import InstagramClient
+from app.connectors.instagram.credentials import resolve_settings as resolve_instagram_settings
+from app.connectors.instagram.errors import InstagramError
 from app.connectors.instagram.service import InstagramCollector, CollectionBusyError
 
 router=APIRouter(dependencies=[Depends(authenticate)])
@@ -25,10 +27,10 @@ class RunRequest(BaseModel):
 
 def get_instagram_settings():
     try:
-        settings=Settings()
+        settings=resolve_instagram_settings(Settings(),allow_refresh=True)
         settings.require_instagram_token()
         return settings
-    except (ValueError,ValidationError):
+    except (ValueError,ValidationError,InstagramError):
         raise HTTPException(503,"Instagram server configuration is incomplete or invalid") from None
 
 

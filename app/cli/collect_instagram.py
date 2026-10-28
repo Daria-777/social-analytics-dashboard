@@ -12,6 +12,8 @@ from app.database import get_engine
 from app.connectors.instagram.client import InstagramClient
 from app.connectors.instagram.logging import InstagramLogFormatter
 from app.connectors.instagram.service import InstagramCollector, CollectionBusyError
+from app.connectors.instagram.credentials import resolve_settings
+from app.connectors.instagram.errors import InstagramError
 
 
 def main(argv=None,*,settings=None,transport=None,engine_factory=get_engine):
@@ -21,9 +23,9 @@ def main(argv=None,*,settings=None,transport=None,engine_factory=get_engine):
     parser.add_argument("--json",action="store_true",help="Print safe summary as JSON")
     args=parser.parse_args(argv)
     try:
-        settings=settings or Settings()
+        settings=resolve_settings(settings or Settings(),allow_refresh=True,transport=transport)
         token=settings.require_instagram_token()
-    except (ValueError,ValidationError):
+    except (ValueError,ValidationError,InstagramError):
         print("Configuration error: set valid Instagram server environment variables",file=sys.stderr)
         return 2
     handler=logging.StreamHandler()

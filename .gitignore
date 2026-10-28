@@ -12,3 +12,7 @@ __pycache__/
 backups/
 
 .tiktok-credentials/
+.instagram-credentials/
+
+# Dedicated private Growth service connection
+private/

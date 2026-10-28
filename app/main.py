@@ -21,6 +21,10 @@ from app.api import router
 app.include_router(router)
 from app.collectors_api import router as collectors_router
 app.include_router(collectors_router)
+from app.comments_api import router as comments_router
+app.include_router(comments_router)
+from app.growth_api import router as growth_router
+app.include_router(growth_router)
 from app.manual_api import router as manual_router
 app.include_router(manual_router)
 from app.analytics_api import router as analytics_router

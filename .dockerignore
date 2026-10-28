@@ -11,6 +11,11 @@ tests
 
 .tiktok-credentials/
 **/.tiktok-credentials/
+.instagram-credentials/
+**/.instagram-credentials/
 
 # Private database copies are never part of an image build.
 backups/
+
+# Dedicated private Growth service connection
+private/
